@@ -10,7 +10,7 @@ import numpy as np
 from typing import Optional
 
 
-def load_image(image_path: str) -> np.ndarray:
+def doc_anh(duong_dan: str) -> np.ndarray:
     """
     Đọc ảnh từ đường dẫn file.
     
@@ -31,14 +31,14 @@ def load_image(image_path: str) -> np.ndarray:
         >>> print(image.shape)
         (1200, 800, 3)
     """
-    # TODO: Bước 1 - Sử dụng cv2.imread() để đọc ảnh từ image_path
-    # TODO: Bước 2 - Kiểm tra xem ảnh có được đọc thành công không (image is not None)
+    # TODO: Bước 1 - Sử dụng cv2.imread() để đọc ảnh từ duong_dan
+    # TODO: Bước 2 - Kiểm tra xem ảnh có được đọc thành công không (anh is not None)
     # TODO: Bước 3 - Nếu ảnh None, raise FileNotFoundError với thông báo rõ ràng
     # TODO: Bước 4 - Return ảnh đã đọc được
     raise NotImplementedError
 
 
-def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
+def chuyen_xam(anh: np.ndarray) -> np.ndarray:
     """
     Chuyển đổi ảnh màu (BGR) sang ảnh xám (Grayscale).
     
@@ -65,9 +65,9 @@ def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
     raise NotImplementedError
 
 
-def apply_noise_filter(gray_image: np.ndarray, 
-                       filter_type: str = "gaussian",
-                       kernel_size: int = 5) -> np.ndarray:
+def loc_nhieu(anh_xam: np.ndarray, 
+              loai_loc: str = "gaussian",
+              kich_thuoc: int = 5) -> np.ndarray:
     """
     Áp dụng bộ lọc khử nhiễu cho ảnh xám.
     
@@ -92,14 +92,14 @@ def apply_noise_filter(gray_image: np.ndarray,
         >>> gray = convert_to_grayscale(image)
         >>> blurred = apply_noise_filter(gray, filter_type="gaussian", kernel_size=5)
     """
-    # TODO: Bước 1 - Kiểm tra kernel_size phải là số lẻ và > 0
-    # TODO: Bước 2 - Kiểm tra filter_type có hợp lệ không
-    # TODO: Bước 3 - Nếu filter_type == "gaussian":
-    #                Sử dụng cv2.GaussianBlur(gray_image, (kernel_size, kernel_size), 0)
-    # TODO: Bước 4 - Nếu filter_type == "median":
-    #                Sử dụng cv2.medianBlur(gray_image, kernel_size)
-    # TODO: Bước 5 - Nếu filter_type == "bilateral":
-    #                Sử dụng cv2.bilateralFilter(gray_image, kernel_size, sigmaColor, sigmaSpace)
+    # TODO: Bước 1 - Kiểm tra kich_thuoc phải là số lẻ và > 0
+    # TODO: Bước 2 - Kiểm tra loai_loc có hợp lệ không
+    # TODO: Bước 3 - Nếu loai_loc == "gaussian":
+    #                Sử dụng cv2.GaussianBlur(anh_xam, (kich_thuoc, kich_thuoc), 0)
+    # TODO: Bước 4 - Nếu loai_loc == "median":
+    #                Sử dụng cv2.medianBlur(anh_xam, kich_thuoc)
+    # TODO: Bước 5 - Nếu loai_loc == "bilateral":
+    #                Sử dụng cv2.bilateralFilter(anh_xam, kich_thuoc, sigmaColor, sigmaSpace)
     #                với sigmaColor=75, sigmaSpace=75
     # TODO: Bước 6 - Return ảnh đã được lọc
     raise NotImplementedError

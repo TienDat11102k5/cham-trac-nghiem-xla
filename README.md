@@ -41,8 +41,12 @@ cham-trac-nghiem-xla/
 
 ### 1. Clone repository
 
+**Lưu ý:** Repository này là private. Các thành viên trong nhóm cần được thêm vào Collaborators:
+- Vào GitHub repo → Settings → Collaborators → Add people
+- Thêm GitHub username của từng thành viên
+
 ```bash
-git clone <repository-url>
+git clone https://github.com/TienDat11102k5/cham-trac-nghiem-xla.git
 cd cham-trac-nghiem-xla
 ```
 

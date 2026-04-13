@@ -13,17 +13,17 @@ __version__ = "1.0.0"
 __author__ = "Computer Vision Team"
 
 # Import các module chính để dễ dàng truy cập
-from .preprocessing import load_image, convert_to_grayscale, apply_noise_filter
-from .transform import detect_edges, find_document_corners, apply_perspective_transform
+from .preprocessing import doc_anh, chuyen_xam, loc_nhieu
+from .transform import tim_canh, tim_goc_giay, nan_chinh_anh
 from .grader import extract_bubble_grid, segment_bubbles, calculate_score
 
 __all__ = [
-    "load_image",
-    "convert_to_grayscale",
-    "apply_noise_filter",
-    "detect_edges",
-    "find_document_corners",
-    "apply_perspective_transform",
+    "doc_anh",
+    "chuyen_xam",
+    "loc_nhieu",
+    "tim_canh",
+    "tim_goc_giay",
+    "nan_chinh_anh",
     "extract_bubble_grid",
     "segment_bubbles",
     "calculate_score",

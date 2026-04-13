@@ -10,9 +10,9 @@ import numpy as np
 from typing import Tuple, List, Optional
 
 
-def detect_edges(blurred_image: np.ndarray,
-                 low_threshold: int = 50,
-                 high_threshold: int = 150) -> np.ndarray:
+def tim_canh(anh_mo: np.ndarray,
+             nguong_thap: int = 50,
+             nguong_cao: int = 150) -> np.ndarray:
     """
     Phát hiện biên trong ảnh sử dụng thuật toán Canny Edge Detection.
     
@@ -36,12 +36,12 @@ def detect_edges(blurred_image: np.ndarray,
         >>> cv2.imshow("Edges", edges)
     """
     # TODO: Bước 1 - Sử dụng cv2.Canny() với các tham số:
-    #                blurred_image, low_threshold, high_threshold
+    #                anh_mo, nguong_thap, nguong_cao
     # TODO: Bước 2 - Return ảnh biên (edge map)
     raise NotImplementedError
 
 
-def find_document_corners(edges: np.ndarray) -> np.ndarray:
+def tim_goc_giay(anh_canh: np.ndarray) -> np.ndarray:
     """
     Tìm 4 góc của tờ giấy thi từ ảnh biên.
     
@@ -82,10 +82,10 @@ def find_document_corners(edges: np.ndarray) -> np.ndarray:
     raise NotImplementedError
 
 
-def apply_perspective_transform(image: np.ndarray, 
-                                corners: np.ndarray,
-                                output_width: int = 800,
-                                output_height: int = 1200) -> np.ndarray:
+def nan_chinh_anh(anh: np.ndarray, 
+                  cac_goc: np.ndarray,
+                  chieu_rong: int = 800,
+                  chieu_cao: int = 1200) -> np.ndarray:
     """
     Áp dụng phép biến đổi phối cảnh để nắn chỉnh ảnh từ góc nghiêng về mặt phẳng chuẩn.
     
@@ -112,13 +112,13 @@ def apply_perspective_transform(image: np.ndarray,
     # TODO: Bước 1 - Định nghĩa 4 điểm đích (destination points) tạo thành hình chữ nhật:
     #                dst_points = np.array([
     #                    [0, 0],                              # top-left
-    #                    [output_width - 1, 0],               # top-right
-    #                    [output_width - 1, output_height - 1], # bottom-right
-    #                    [0, output_height - 1]               # bottom-left
+    #                    [chieu_rong - 1, 0],                 # top-right
+    #                    [chieu_rong - 1, chieu_cao - 1],     # bottom-right
+    #                    [0, chieu_cao - 1]                   # bottom-left
     #                ], dtype=np.float32)
     # TODO: Bước 2 - Tính ma trận biến đổi phối cảnh:
-    #                matrix = cv2.getPerspectiveTransform(corners, dst_points)
+    #                matrix = cv2.getPerspectiveTransform(cac_goc, dst_points)
     # TODO: Bước 3 - Áp dụng phép biến đổi:
-    #                warped = cv2.warpPerspective(image, matrix, (output_width, output_height))
+    #                warped = cv2.warpPerspective(anh, matrix, (chieu_rong, chieu_cao))
     # TODO: Bước 4 - Return ảnh đã nắn chỉnh
     raise NotImplementedError
