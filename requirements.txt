@@ -1,0 +1,27 @@
+# Hệ thống chấm trắc nghiệm tự động (OMR) - Requirements
+# Python >= 3.8
+
+# Computer Vision
+opencv-python==4.8.1.78
+opencv-contrib-python==4.8.1.78
+
+# Numerical Computing
+numpy==1.24.3
+
+# Image Processing (optional, nếu cần thêm tính năng)
+Pillow==10.0.0
+
+# Data Handling
+pandas==2.0.3
+
+# Jupyter Notebook (cho notebooks/pipeline_demo.ipynb)
+jupyter==1.0.0
+notebook==7.0.3
+ipykernel==6.25.2
+
+# Visualization (optional)
+matplotlib==3.7.2
+
+# Testing (optional)
+pytest==7.4.2
+pytest-cov==4.1.0
