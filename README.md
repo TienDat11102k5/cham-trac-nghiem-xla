@@ -5,6 +5,7 @@
 ## 📋 Mô tả
 
 Hệ thống tự động chấm điểm bài thi trắc nghiệm từ ảnh chụp/scan, sử dụng các kỹ thuật Computer Vision:
+
 - Tiền xử lý ảnh (Grayscale, Noise Filtering)
 - Phát hiện biên (Canny Edge Detection)
 - Biến đổi phối cảnh (Perspective Transform)
@@ -42,6 +43,7 @@ cham-trac-nghiem-xla/
 ### 1. Clone repository
 
 **Lưu ý:** Repository này là private. Các thành viên trong nhóm cần được thêm vào Collaborators:
+
 - Vào GitHub repo → Settings → Collaborators → Add people
 - Thêm GitHub username của từng thành viên
 
@@ -112,34 +114,40 @@ Tạo file `data/answer_key.json`:
 ## 🎯 Nhiệm vụ phân công
 
 ### Thành viên 1: Quản trị Hệ thống & Kiến trúc
-- [x] Thiết lập Repository, viết khung main.py
-- [x] Định nghĩa các tham số (Interface/API) đầu vào/ra cho các Core Dev
-- [x] Phân nhánh Github, đóng gói mã nguồn & viết README
+
+- [X] Thiết lập Repository, viết khung main.py
+- [X] Định nghĩa các tham số (Interface/API) đầu vào/ra cho các Core Dev
+- [X] Phân nhánh Github, đóng gói mã nguồn & viết README
 
 ### Thành viên 2: Lập trình viên Cốt lõi 1 (Tiền xử lý)
-- [ ] Khởi tạo hàm đọc ảnh
-- [ ] Lập trình viên Cốt lõi 1 (Gaussian, Median...) để làm sạch nhiễu
-- [ ] Hỗ trợ TV3 tìm cạnh (Canny)
-- [ ] Viết test cases cho module preprocessing
+
+- [X] Khởi tạo hàm đọc ảnh
+- [X] Lập trình viên Cốt lõi 1 (Gaussian, Median...) để làm sạch nhiễu
+- [X] Hỗ trợ TV3 tìm cạnh (Canny)
+- [X] Viết test cases cho module preprocessing
 
 ### Thành viên 3: Lập trình viên Cốt lõi 2 (Biến đổi hình học)
+
 - [ ] Nhận ảnh từ TV2, lập trình lấy thuật toán tìm 4 góc
 - [ ] Áp dụng Biến đổi phối cảnh (Perspective Transform) nắn phẳng tờ giấy bị nghiêng
 - [ ] Viết test cases cho module transform
 
 ### Thành viên 4: Lập trình viên Cốt lõi 3 (Phân đoạn & Chấm điểm)
+
 - [ ] Không đợi TV3: Tự chuẩn bị ảnh mẫu (mock data)
 - [ ] Cắt tọa độ lưới đáp án
 - [ ] Phân ngưỡng mức đen & Đếm logic tính điểm
 - [ ] Viết test cases với mock data
 
 ### Thành viên 5: Chuyên viên Dữ liệu & Kiểm thử QA
+
 - [ ] Thu thập Đợt 2 (Tập Test bí mật có ảnh khó)
 - [ ] Xây dựng kịch bản kiểm thử (Test cases)
 - [ ] Chạy test tự động và báo Bug cho Dev
 - [ ] Tổng hợp số liệu đo kiểm thử, đánh giá Accuracy
 
 ### Thành viên 6: Chuyên trách Báo cáo khoa học
+
 - [ ] Tổng hợp tài liệu/lý thuyết
 - [ ] Lên khung mục lục
 - [ ] Phụ giúp TV5 tạo nhãn Ground Truth và quyết định các thang đo (Accuracy...)
