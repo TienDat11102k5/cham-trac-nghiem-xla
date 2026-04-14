@@ -17,7 +17,7 @@ def doc_anh(duong_dan: str) -> np.ndarray:
     Đọc ảnh từ đường dẫn file.
 
     Args:
-        image_path (str): Đường dẫn tuyệt đối hoặc tương đối đến file ảnh.
+        duong_dan (str): Đường dẫn tuyệt đối hoặc tương đối đến file ảnh.
                          Hỗ trợ các định dạng: .jpg, .jpeg, .png, .bmp
 
     Returns:
@@ -29,8 +29,8 @@ def doc_anh(duong_dan: str) -> np.ndarray:
         ValueError: Nếu file không phải là ảnh hợp lệ.
 
     Examples:
-        >>> image = load_image("data/test_sheet_01.jpg")
-        >>> print(image.shape)
+        >>> anh = doc_anh("data/test_sheet_01.jpg")
+        >>> print(anh.shape)
         (1200, 800, 3)
     """
     # Bước 1 - Kiểm tra file tồn tại trước khi gọi OpenCV
@@ -61,7 +61,7 @@ def chuyen_xam(anh: np.ndarray) -> np.ndarray:
     Chuyển đổi ảnh màu (BGR) sang ảnh xám (Grayscale).
 
     Args:
-        image (np.ndarray): Ảnh màu đầu vào với shape (height, width, 3).
+        anh (np.ndarray): Ảnh màu đầu vào với shape (height, width, 3).
                            Channels theo thứ tự BGR.
 
     Returns:
@@ -73,9 +73,9 @@ def chuyen_xam(anh: np.ndarray) -> np.ndarray:
         - Công thức chuyển đổi: Gray = 0.299*R + 0.587*G + 0.114*B
 
     Examples:
-        >>> color_image = load_image("test.jpg")
-        >>> gray_image = convert_to_grayscale(color_image)
-        >>> print(gray_image.shape)
+        >>> anh_mau = doc_anh("test.jpg")
+        >>> anh_xam = chuyen_xam(anh_mau)
+        >>> print(anh_xam.shape)
         (1200, 800)
     """
     # Bước 1 - Guard clause: nếu ảnh đã là xám (2D array) → return trực tiếp
@@ -99,10 +99,10 @@ def loc_nhieu(anh_xam: np.ndarray,
     Áp dụng bộ lọc khử nhiễu cho ảnh xám.
 
     Args:
-        gray_image (np.ndarray): Ảnh xám đầu vào với shape (height, width).
-        filter_type (str, optional): Loại bộ lọc. Mặc định là "gaussian".
+        anh_xam (np.ndarray): Ảnh xám đầu vào với shape (height, width).
+        loai_loc (str, optional): Loại bộ lọc. Mặc định là "gaussian".
                                     Các giá trị hợp lệ: "gaussian", "median", "bilateral"
-        kernel_size (int, optional): Kích thước kernel (phải là số lẻ). Mặc định là 5.
+        kich_thuoc (int, optional): Kích thước kernel (phải là số lẻ). Mặc định là 5.
 
     Returns:
         np.ndarray: Ảnh đã được làm mờ/khử nhiễu với cùng shape như ảnh đầu vào.
@@ -113,11 +113,11 @@ def loc_nhieu(anh_xam: np.ndarray,
         - Bilateral Filter: Giữ được cạnh sắc nét trong khi làm mờ vùng phẳng.
 
     Raises:
-        ValueError: Nếu filter_type không hợp lệ hoặc kernel_size là số chẵn.
+        ValueError: Nếu loai_loc không hợp lệ hoặc kich_thuoc là số chẵn.
 
     Examples:
-        >>> gray = convert_to_grayscale(image)
-        >>> blurred = apply_noise_filter(gray, filter_type="gaussian", kernel_size=5)
+        >>> anh_xam = chuyen_xam(anh)
+        >>> mo_gaussian = loc_nhieu(anh_xam, loai_loc="gaussian", kich_thuoc=5)
     """
     # Bước 1 - Validate kich_thuoc: phải là số lẻ dương
     # Kernel cần có 1 pixel trung tâm chính xác → số chẵn không có tâm

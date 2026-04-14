@@ -142,6 +142,116 @@ class TestLocNhieu:
         assert "4" in str(thong_tin_loi.value)
 
 
+class TestXuLyAnhThucTe:
+    """
+    Test tự động xử lý ảnh thực tế từ data/raw/.
+
+    Với MỖI ảnh tìm thấy trong data/raw/, test sẽ:
+      1. Đọc ảnh gốc (doc_anh)
+      2. Chuyển sang ảnh xám (chuyen_xam)       → lưu: <ten>_01_anh_xam.jpg
+      3. Lọc nhiễu Gaussian  (loc_nhieu)         → lưu: <ten>_02_loc_nhieu_gaussian.jpg
+      4. Lọc nhiễu Median    (loc_nhieu)         → lưu: <ten>_03_loc_nhieu_median.jpg
+      5. Lọc nhiễu Bilateral (loc_nhieu)         → lưu: <ten>_04_loc_nhieu_bilateral.jpg
+
+    Kết quả được lưu tự động vào data/processed/ với tên tiếng Việt.
+    """
+
+    # Đường dẫn tương đối từ thư mục gốc project
+    THU_MUC_NGUON = Path(__file__).parent.parent / "data" / "raw"
+    THU_MUC_DICH  = Path(__file__).parent.parent / "data" / "processed"
+
+    # Đuôi file ảnh được hỗ trợ
+    DUOI_FILE_HO_TRO = {".jpg", ".jpeg", ".png", ".bmp"}
+
+    @pytest.fixture(autouse=True)
+    def dam_bao_thu_muc_dich_ton_tai(self):
+        """Tạo thư mục data/processed/ nếu chưa có trước khi chạy test."""
+        self.THU_MUC_DICH.mkdir(parents=True, exist_ok=True)
+
+    def _lay_danh_sach_anh(self):
+        """Lấy danh sách tất cả file ảnh trong data/raw/ (bỏ .gitkeep)."""
+        if not self.THU_MUC_NGUON.exists():
+            return []
+        return [
+            f for f in self.THU_MUC_NGUON.iterdir()
+            if f.is_file() and f.suffix.lower() in self.DUOI_FILE_HO_TRO
+        ]
+
+    def _ten_dau_ra(self, ten_goc: str, buoc: str) -> Path:
+        """
+        Tạo tên file đầu ra tiếng Việt theo quy ước.
+
+        Ví dụ: ten_goc='test_sheet_01', buoc='01_anh_xam'
+        → data/processed/test_sheet_01_01_anh_xam.jpg
+        """
+        return self.THU_MUC_DICH / f"{ten_goc}_{buoc}.jpg"
+
+    def test_co_anh_trong_thu_muc_raw(self):
+        """Kiểm tra data/raw/ tồn tại và có ít nhất 1 ảnh để test."""
+        danh_sach = self._lay_danh_sach_anh()
+        assert len(danh_sach) > 0, (
+            f"Không tìm thấy ảnh nào trong '{self.THU_MUC_NGUON}'. "
+            "Hãy thêm ít nhất 1 ảnh phiếu trắc nghiệm vào data/raw/"
+        )
+
+    def test_xu_ly_toan_bo_anh_trong_raw(self):
+        """
+        Test chính: Tự động xử lý TẤT CẢ ảnh trong data/raw/
+        và lưu kết quả tên tiếng Việt vào data/processed/.
+        """
+        danh_sach_anh = self._lay_danh_sach_anh()
+
+        if not danh_sach_anh:
+            pytest.skip("Không có ảnh trong data/raw/ — bỏ qua test thực tế")
+
+        # Bảng các bước xử lý: (tên_bước, hàm_xử_lý)
+        cac_buoc = [
+            ("01_anh_xam",             lambda xam: xam),
+            ("02_loc_nhieu_gaussian",  lambda xam: loc_nhieu(xam, loai_loc="gaussian",  kich_thuoc=5)),
+            ("03_loc_nhieu_median",    lambda xam: loc_nhieu(xam, loai_loc="median",    kich_thuoc=5)),
+            ("04_loc_nhieu_bilateral", lambda xam: loc_nhieu(xam, loai_loc="bilateral", kich_thuoc=5)),
+        ]
+
+        ket_qua_tong = []
+
+        for duong_dan_anh in sorted(danh_sach_anh):
+            ten_goc = duong_dan_anh.stem  # tên file không có đuôi
+
+            # Bước 1 — Đọc ảnh gốc
+            anh_goc = doc_anh(str(duong_dan_anh))
+            assert anh_goc is not None and anh_goc.ndim == 3, \
+                f"doc_anh() thất bại với '{duong_dan_anh.name}'"
+
+            # Bước 2 — Chuyển sang ảnh xám (dùng chung cho các bước lọc)
+            anh_xam = chuyen_xam(anh_goc)
+            assert anh_xam.ndim == 2, "chuyen_xam() phải trả về mảng 2D"
+
+            # Bước 3-6 — Chạy từng bước lọc và lưu kết quả
+            for ten_buoc, ham_xu_ly in cac_buoc:
+                anh_ket_qua = ham_xu_ly(anh_xam)
+                duong_dan_luu = self._ten_dau_ra(ten_goc, ten_buoc)
+
+                # Lưu ảnh ra file
+                thanh_cong = cv2.imwrite(str(duong_dan_luu), anh_ket_qua)
+                assert thanh_cong, \
+                    f"cv2.imwrite() thất bại khi lưu '{duong_dan_luu.name}'"
+
+                # Kiểm tra file đã tồn tại và có dung lượng > 0
+                assert duong_dan_luu.exists() and duong_dan_luu.stat().st_size > 0, \
+                    f"File đầu ra bị rỗng: '{duong_dan_luu.name}'"
+
+                # Kiểm tra shape đầu ra nhất quán với ảnh xám gốc
+                assert anh_ket_qua.shape == anh_xam.shape, \
+                    f"Shape thay đổi sau bước '{ten_buoc}'"
+
+                ket_qua_tong.append(duong_dan_luu.name)
+
+        # In báo cáo tóm tắt (hiển thị khi chạy pytest -v -s)
+        print(f"\n\n  📁 data/processed/ — {len(ket_qua_tong)} file đã tạo:")
+        for ten in sorted(ket_qua_tong):
+            print(f"     ✓ {ten}")
+
+
 # Chạy tests trực tiếp
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    pytest.main([__file__, "-v", "-s"])

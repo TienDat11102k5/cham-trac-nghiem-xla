@@ -37,17 +37,20 @@ ENV/
 *.swo
 *~
 
-# Data files (ảnh gốc không push lên Git)
-data/raw/*
-!data/raw/.gitkeep
-
-# Output files
-output/
+# Tránh push rác (Chặn toàn bộ ảnh trước)
 *.jpg
 *.jpeg
 *.png
 *.bmp
 *.tiff
+
+# Data files (Ngoại lệ: Cho phép đưa ảnh trong raw và processed lên Git)
+!data/raw/*.jpg
+!data/raw/*.jpeg
+!data/raw/*.png
+!data/processed/*.jpg
+!data/processed/*.jpeg
+!data/processed/*.png
 
 # Logs
 *.log
