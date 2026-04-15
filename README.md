@@ -128,9 +128,11 @@ Tạo file `data/answer_key.json`:
 
 ### Thành viên 3: Lập trình viên Cốt lõi 2 (Biến đổi hình học)
 
-- [ ] Nhận ảnh từ TV2, lập trình lấy thuật toán tìm 4 góc
-- [ ] Áp dụng Biến đổi phối cảnh (Perspective Transform) nắn phẳng tờ giấy bị nghiêng
-- [ ] Viết test cases cho module transform
+- [X] Nhận ảnh từ TV2, lập trình lấy thuật toán tìm 4 góc
+- [X] Áp dụng Biến đổi phối cảnh (Perspective Transform) nắn phẳng tờ giấy bị nghiêng
+- [X] Đóng gói thành module độc lập (src/transform.py)
+- [X] Tối ưu chống cắt lẹm góc/nhầm khung (sử dụng morphology)
+- [X] Viết test cases đầy đủ
 
 ### Thành viên 4: Lập trình viên Cốt lõi 3 (Phân đoạn & Chấm điểm)
 
