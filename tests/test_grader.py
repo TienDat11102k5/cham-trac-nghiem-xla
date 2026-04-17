@@ -1,125 +1,565 @@
 """
-Test cases cho module grader.py
+Test cases cho module grader.py (TV4).
 
-Thành viên phụ trách: Thành viên 4
-Nhiệm vụ: Test trích xuất ROI, phân đoạn, chấm điểm (dùng mock data)
+Chiến lược test:
+  - Không dùng mock_data_generator.py
+  - Mock data được tạo trực tiếp bằng numpy/cv2 trong từng test
+  - Test thực tế dùng ảnh nan_chinh từ TV3 (nếu có)
+
+Chạy:
+    pytest tests/test_grader.py -v -s
+hoặc:
+    python tests/test_grader.py
+
+Author: TV4
 """
 
+import json
+import sys
 import pytest
 import cv2
 import numpy as np
 from pathlib import Path
-import sys
 
+# Thêm thư mục gốc project vào path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.grader import extract_bubble_grid, segment_bubbles, calculate_score
+from src.grader import (
+    extract_bubble_grid,
+    segment_bubbles,
+    calculate_score,
+    export_result_json,
+    print_result_table,
+    grade_from_image,
+    _COL_LEFT_XS,
+    _COL_RIGHT_XS,
+    _ROW_YS,
+    _BUBBLE_W,
+    _BUBBLE_H,
+)
 
+
+# ============================================================
+# HELPER: Tạo mock binary image cho test calculate_score
+# ============================================================
+
+def _make_binary_grid(answers: dict,
+                      num_q: int = 4,
+                      n_choices: int = 4,
+                      bubble_h: int = 40,
+                      bubble_w: int = 60) -> np.ndarray:
+    """
+    Tạo ảnh nhị phân giả lập lưới đáp án (layout tự động / chia đều).
+
+    Mỗi hàng = 1 câu, mỗi cột = 1 lựa chọn (A B C D).
+    Bubble được tô = vùng trắng giữa hàng/cột tương ứng.
+
+    Args:
+        answers (dict): {1: 'A', 2: 'C', ...}
+        num_q: Số câu hỏi.
+        n_choices: Số lựa chọn.
+        bubble_h, bubble_w: Kích thước 1 ô.
+
+    Returns:
+        np.ndarray: Ảnh nhị phân shape (num_q*bubble_h, n_choices*bubble_w).
+    """
+    choices = ['A', 'B', 'C', 'D', 'E'][:n_choices]
+    h = num_q * bubble_h
+    w = n_choices * bubble_w
+    binary = np.zeros((h, w), dtype=np.uint8)
+
+    for q_num, chosen in answers.items():
+        i = q_num - 1  # 0-indexed row
+        if i >= num_q:
+            continue
+        j = choices.index(chosen) if chosen in choices else -1
+        if j < 0:
+            continue
+        # Tô vùng trắng (padding 6px để giả sát thực tế)
+        y1 = i * bubble_h + 6
+        y2 = (i + 1) * bubble_h - 6
+        x1 = j * bubble_w + 6
+        x2 = (j + 1) * bubble_w - 6
+        binary[y1:y2, x1:x2] = 255
+
+    return binary
+
+
+def _make_binary_with_erase(answers: dict,
+                             erased_q: dict,
+                             num_q: int = 4,
+                             n_choices: int = 4,
+                             bubble_h: int = 40,
+                             bubble_w: int = 60) -> np.ndarray:
+    """
+    Tạo ảnh nhị phân có tẩy xóa bẩn.
+
+    erased_q = {q_num: 'A'} → câu q_num có ô A bị tẩy còn mờ (intensity thấp).
+    answers = đáp án mới sau khi tẩy và tô lại.
+
+    Args:
+        answers (dict): Đáp án mới (tô đậm).
+        erased_q (dict): Đáp án cũ bị tẩy (tô mờ, ~35% white pixel).
+    """
+    binary = _make_binary_grid(answers, num_q, n_choices, bubble_h, bubble_w)
+    choices = ['A', 'B', 'C', 'D'][:n_choices]
+
+    for q_num, erased_choice in erased_q.items():
+        i = q_num - 1
+        j = choices.index(erased_choice) if erased_choice in choices else -1
+        if j < 0:
+            continue
+        # Tô mờ vùng bị tẩy (35% pixel trắng = nhiễu tẩy xóa)
+        y1 = i * bubble_h + 6
+        y2 = (i + 1) * bubble_h - 6
+        x1 = j * bubble_w + 6
+        x2 = (j + 1) * bubble_w - 6
+        noise_mask = np.random.rand(y2 - y1, x2 - x1) < 0.35
+        binary[y1:y2, x1:x2] = np.where(noise_mask, 255, 0).astype(np.uint8)
+
+    return binary
+
+
+# ============================================================
+# TEST CLASS 1: extract_bubble_grid
+# ============================================================
 
 class TestExtractBubbleGrid:
-    """Test cases cho hàm extract_bubble_grid()"""
-    
-    def test_extract_roi_basic(self):
-        """Test cắt ROI cơ bản"""
-        # TODO: Bước 1 - Tạo ảnh test 1200x800
-        # TODO: Bước 2 - Gọi extract_bubble_grid() với ROI hợp lệ
-        # TODO: Bước 3 - Assert output shape == (roi_height, roi_width)
-        pass
-    
-    def test_extract_roi_out_of_bounds(self):
-        """Test với ROI vượt quá giới hạn ảnh"""
-        # TODO: Gọi extract_bubble_grid() với ROI lớn hơn ảnh
-        # TODO: Phải xử lý lỗi hoặc clip về giới hạn hợp lệ
-        pass
+    """Test hàm extract_bubble_grid()"""
 
+    def test_extract_roi_basic(self):
+        """Cắt ROI cơ bản: shape output phải đúng."""
+        img = np.zeros((1200, 800, 3), dtype=np.uint8)
+        grid = extract_bubble_grid(img, roi_x=100, roi_y=200,
+                                   roi_width=600, roi_height=800)
+        assert grid.shape == (800, 600, 3), f"Shape sai: {grid.shape}"
+
+    def test_extract_roi_grayscale(self):
+        """Cắt ROI từ ảnh xám (2D)."""
+        img = np.zeros((1200, 800), dtype=np.uint8)
+        grid = extract_bubble_grid(img, roi_x=0, roi_y=0,
+                                   roi_width=800, roi_height=1200)
+        assert grid.shape == (1200, 800)
+
+    def test_extract_roi_default_full_image(self):
+        """roi_width=None, roi_height=None → lấy toàn bộ ảnh."""
+        img = np.zeros((500, 400, 3), dtype=np.uint8)
+        grid = extract_bubble_grid(img, roi_x=50, roi_y=50)
+        assert grid.shape == (450, 350, 3)
+
+    def test_extract_roi_out_of_bounds_raises(self):
+        """ROI vượt biên phải raise ValueError."""
+        img = np.zeros((100, 100), dtype=np.uint8)
+        with pytest.raises(ValueError) as exc_info:
+            extract_bubble_grid(img, roi_x=50, roi_y=50,
+                                roi_width=100, roi_height=100)
+        assert "vượt quá" in str(exc_info.value)
+
+    def test_extract_roi_preserves_content(self):
+        """Nội dung vùng cắt phải giữ nguyên giá trị pixel."""
+        img = np.random.randint(0, 255, (200, 200), dtype=np.uint8)
+        grid = extract_bubble_grid(img, roi_x=10, roi_y=20,
+                                   roi_width=50, roi_height=60)
+        assert np.array_equal(grid, img[20:80, 10:60])
+
+
+# ============================================================
+# TEST CLASS 2: segment_bubbles
+# ============================================================
 
 class TestSegmentBubbles:
-    """Test cases cho hàm segment_bubbles()"""
-    
-    def test_adaptive_threshold(self):
-        """Test phân ngưỡng adaptive"""
-        # TODO: Bước 1 - Tạo ảnh xám test với vùng sáng/tối
-        # TODO: Bước 2 - Gọi segment_bubbles(image, threshold_method="adaptive")
-        # TODO: Bước 3 - Assert output là ảnh nhị phân (chỉ có 0 và 255)
-        # TODO: Bước 4 - Assert output shape == input shape
-        pass
-    
-    def test_otsu_threshold(self):
-        """Test phân ngưỡng Otsu"""
-        # TODO: Tương tự test_adaptive_threshold nhưng với method="otsu"
-        pass
-    
-    def test_binary_threshold(self):
-        """Test phân ngưỡng binary"""
-        # TODO: Tương tự test_adaptive_threshold nhưng với method="binary"
-        pass
-    
-    def test_invalid_threshold_method(self):
-        """Test với method không hợp lệ"""
-        # TODO: Sử dụng pytest.raises(ValueError)
-        pass
+    """Test hàm segment_bubbles()"""
 
+    @pytest.fixture
+    def gray_with_dark_circle(self):
+        """Ảnh xám 100×100 có 1 vòng tròn đen (bubble giả)."""
+        img = np.full((100, 100), 220, dtype=np.uint8)
+        cv2.circle(img, (50, 50), 15, 30, -1)  # vòng tròn đen
+        return img
+
+    def test_adaptive_output_binary(self, gray_with_dark_circle):
+        """Output phải là ảnh nhị phân (chỉ 0 và 255)."""
+        binary = segment_bubbles(gray_with_dark_circle, "adaptive")
+        unique_vals = set(np.unique(binary).tolist())
+        assert unique_vals.issubset({0, 255}), f"Có giá trị lạ: {unique_vals}"
+
+    def test_adaptive_shape_preserved(self, gray_with_dark_circle):
+        """Shape đầu ra phải bằng shape đầu vào."""
+        binary = segment_bubbles(gray_with_dark_circle, "adaptive")
+        assert binary.shape == gray_with_dark_circle.shape
+
+    def test_adaptive_detects_dark_region(self, gray_with_dark_circle):
+        """Vùng tối (bubble được tô) phải cho ra pixel trắng."""
+        binary = segment_bubbles(gray_with_dark_circle, "adaptive")
+        # Vùng tâm circle phải có pixel trắng (được tô)
+        center_region = binary[35:65, 35:65]
+        assert center_region.max() == 255, "Vùng tô phải có pixel trắng"
+
+    def test_otsu_threshold(self, gray_with_dark_circle):
+        """Otsu threshold phải trả về ảnh nhị phân hợp lệ."""
+        binary = segment_bubbles(gray_with_dark_circle, "otsu")
+        assert binary.ndim == 2
+        assert binary.dtype == np.uint8
+        assert set(np.unique(binary).tolist()).issubset({0, 255})
+
+    def test_binary_threshold(self, gray_with_dark_circle):
+        """Binary threshold phải trả về ảnh nhị phân hợp lệ."""
+        binary = segment_bubbles(gray_with_dark_circle, "binary")
+        assert binary.ndim == 2
+        assert binary.dtype == np.uint8
+
+    def test_color_input_auto_convert(self):
+        """Ảnh màu đầu vào phải được tự động chuyển xám."""
+        color_img = np.full((80, 240, 3), 200, dtype=np.uint8)
+        cv2.circle(color_img, (40, 40), 15, (30, 30, 30), -1)
+        binary = segment_bubbles(color_img, "adaptive")
+        assert binary.ndim == 2, "Output phải là 2D"
+
+    def test_invalid_method_raises(self):
+        """Method không hợp lệ phải raise ValueError."""
+        img = np.full((100, 100), 128, dtype=np.uint8)
+        with pytest.raises(ValueError) as exc_info:
+            segment_bubbles(img, "magic_threshold")
+        assert "magic_threshold" in str(exc_info.value)
+
+
+# ============================================================
+# TEST CLASS 3: calculate_score (mock data)
+# ============================================================
 
 class TestCalculateScore:
-    """Test cases cho hàm calculate_score() - DÙNG MOCK DATA"""
-    
-    def test_calculate_score_all_correct(self):
-        """Test chấm điểm khi tất cả đáp án đúng"""
-        # TODO: Bước 1 - Tạo ảnh nhị phân MOCK với 4 câu, mỗi câu 4 lựa chọn
-        #                Ví dụ: Câu 1 chọn A, Câu 2 chọn C, Câu 3 chọn B, Câu 4 chọn D
-        # TODO: Bước 2 - Tạo answer_key giống với đáp án trong ảnh mock
-        # TODO: Bước 3 - Gọi calculate_score()
-        # TODO: Bước 4 - Assert correct_count == 4
-        # TODO: Bước 5 - Assert score == 10.0
-        pass
-    
-    def test_calculate_score_partial_correct(self):
-        """Test chấm điểm khi một số đáp án đúng"""
-        # TODO: Tạo mock data với 2/4 câu đúng
-        # TODO: Assert correct_count == 2
-        # TODO: Assert score == 5.0
-        pass
-    
-    def test_calculate_score_all_wrong(self):
-        """Test chấm điểm khi tất cả sai"""
-        # TODO: Tạo mock data với 0/4 câu đúng
-        # TODO: Assert correct_count == 0
-        # TODO: Assert score == 0.0
-        pass
-    
-    def test_calculate_score_no_answer(self):
-        """Test khi học sinh không tô ô nào"""
-        # TODO: Tạo ảnh nhị phân toàn đen (không có pixel trắng)
-        # TODO: Kiểm tra xử lý trường hợp này
-        pass
-    
-    def test_calculate_score_multiple_answers(self):
-        """Test khi học sinh tô nhiều ô trong 1 câu"""
-        # TODO: Tạo mock data với 2 ô được tô trong cùng 1 câu
-        # TODO: Câu này phải tính là sai
-        pass
+    """Test hàm calculate_score() với mock binary image."""
+
+    def test_all_correct(self):
+        """Tất cả đáp án đúng → điểm 10.0."""
+        answer_key = {1: 'A', 2: 'B', 3: 'C', 4: 'D'}
+        binary = _make_binary_grid(answer_key, num_q=4, n_choices=4)
+        correct, score, answers = calculate_score(binary, answer_key,
+                                                  num_questions=4,
+                                                  choices_per_question=4)
+        assert correct == 4, f"Phải 4 câu đúng, được {correct}"
+        assert score == 10.0, f"Phải điểm 10.0, được {score}"
+
+    def test_partial_correct(self):
+        """Một nửa đúng → điểm 5.0."""
+        answer_key  = {1: 'A', 2: 'B', 3: 'C', 4: 'D'}
+        # Học sinh tô sai câu 3, 4
+        student_ans = {1: 'A', 2: 'B', 3: 'A', 4: 'A'}
+        binary = _make_binary_grid(student_ans, num_q=4, n_choices=4)
+        correct, score, answers = calculate_score(binary, answer_key,
+                                                  num_questions=4,
+                                                  choices_per_question=4)
+        assert correct == 2, f"Phải 2 câu đúng, được {correct}"
+        assert score == 5.0, f"Phải điểm 5.0, được {score}"
+
+    def test_all_wrong(self):
+        """Tất cả sai → điểm 0.0."""
+        answer_key  = {1: 'A', 2: 'B', 3: 'C', 4: 'D'}
+        student_ans = {1: 'D', 2: 'C', 3: 'B', 4: 'A'}
+        binary = _make_binary_grid(student_ans, num_q=4, n_choices=4)
+        correct, score, answers = calculate_score(binary, answer_key,
+                                                  num_questions=4,
+                                                  choices_per_question=4)
+        assert correct == 0
+        assert score == 0.0
+
+    def test_blank_image_no_answer(self):
+        """Ảnh toàn đen (không tô) → tất cả '?', 0 câu đúng."""
+        answer_key = {1: 'A', 2: 'B', 3: 'C', 4: 'D'}
+        binary = np.zeros((160, 240), dtype=np.uint8)  # toàn đen
+        correct, score, answers = calculate_score(binary, answer_key,
+                                                  num_questions=4,
+                                                  choices_per_question=4)
+        assert correct == 0
+        for q in [1, 2, 3, 4]:
+            assert answers[q] == '?', f"Câu {q} phải là '?', được '{answers[q]}'"
+
+    def test_score_formula(self):
+        """Điểm = (số_đúng / tổng_câu) × 10, làm tròn 2 chữ số."""
+        answer_key  = {1: 'A', 2: 'B', 3: 'C'}
+        student_ans = {1: 'A', 2: 'B', 3: 'A'}  # 2/3 đúng
+        binary = _make_binary_grid(student_ans, num_q=3, n_choices=4)
+        correct, score, _ = calculate_score(binary, answer_key,
+                                            num_questions=3,
+                                            choices_per_question=4)
+        expected = round(2/3 * 10, 2)
+        assert correct == 2
+        assert score == expected, f"Phải {expected}, được {score}"
+
+    def test_returns_correct_types(self):
+        """Return types phải đúng: int, float, dict."""
+        answer_key = {1: 'A', 2: 'B'}
+        binary = _make_binary_grid(answer_key, num_q=2, n_choices=4)
+        correct, score, answers = calculate_score(binary, answer_key,
+                                                  num_questions=2,
+                                                  choices_per_question=4)
+        assert isinstance(correct, int)
+        assert isinstance(score, float)
+        assert isinstance(answers, dict)
 
 
-# Helper function để tạo mock data
-def create_mock_bubble_image(answers, num_questions=4, choices_per_question=4):
+# ============================================================
+# TEST CLASS 4: Tẩy xóa bẩn (dirty erase immunity)
+# ============================================================
+
+class TestEraseNoise:
+    """Test khả năng miễn nhiễm tẩy xóa của z-score."""
+
+    def test_erase_noise_still_correct(self):
+        """
+        Câu 1: học sinh tô A rồi tẩy, tô lại B → phải nhận ra B.
+        Ô A sau tẩy có ~35% pixel trắng (nhiễu), ô B có ~80% pixel trắng.
+        """
+        answer_key  = {1: 'B', 2: 'C', 3: 'D', 4: 'A'}
+        student_ans = {1: 'B', 2: 'C', 3: 'D', 4: 'A'}  # đáp án sau tẩy
+        erased_q    = {1: 'A'}  # câu 1 tô A rồi tẩy
+
+        binary = _make_binary_with_erase(student_ans, erased_q,
+                                         num_q=4, n_choices=4,
+                                         bubble_h=50, bubble_w=70)
+        correct, score, answers = calculate_score(binary, answer_key,
+                                                  num_questions=4,
+                                                  choices_per_question=4)
+        # Với z-score, câu 1 vẫn phải chọn B (đậm hơn nhiều)
+        assert answers[1] == 'B', (
+            f"Z-score phải chọn B (đáp án sau tẩy), được '{answers[1]}'"
+        )
+        assert correct >= 3, f"Phải đúng ít nhất 3/4 câu, được {correct}"
+
+
+# ============================================================
+# TEST CLASS 5: export_result_json
+# ============================================================
+
+class TestExportResultJson:
+    """Test hàm export_result_json()"""
+
+    def test_json_is_valid(self):
+        """Output phải là JSON hợp lệ."""
+        answer_key     = {1: 'A', 2: 'B'}
+        student_answers = {1: 'A', 2: 'C'}
+        json_str = export_result_json(1, 5.0, student_answers, answer_key)
+        data = json.loads(json_str)  # không raise = hợp lệ
+        assert isinstance(data, dict)
+
+    def test_json_fields(self):
+        """Các field bắt buộc phải có đủ."""
+        answer_key     = {1: 'A', 2: 'B'}
+        student_answers = {1: 'A', 2: 'C'}
+        json_str = export_result_json(1, 5.0, student_answers, answer_key,
+                                      image_path="test.jpg")
+        data = json.loads(json_str)
+        required = {"total", "correct", "wrong", "score", "score_display",
+                    "details", "image_path"}
+        assert required.issubset(data.keys()), \
+            f"Thiếu fields: {required - data.keys()}"
+
+    def test_json_score_values(self):
+        """Giá trị điểm và số câu phải đúng."""
+        answer_key     = {1: 'A', 2: 'B'}
+        student_answers = {1: 'A', 2: 'C'}
+        json_str = export_result_json(1, 5.0, student_answers, answer_key)
+        data = json.loads(json_str)
+        assert data["correct"]       == 1
+        assert data["wrong"]         == 1
+        assert data["total"]         == 2
+        assert data["score"]         == 5.0
+        assert data["score_display"] == "5.00/10"
+
+    def test_json_details_result_field(self):
+        """Details phải có field 'result': 'correct' hoặc 'wrong'."""
+        answer_key     = {1: 'A', 2: 'B'}
+        student_answers = {1: 'A', 2: 'C'}
+        json_str = export_result_json(1, 5.0, student_answers, answer_key)
+        data = json.loads(json_str)
+        assert data["details"]["1"]["result"] == "correct"
+        assert data["details"]["2"]["result"] == "wrong"
+
+    def test_json_unicode_preserved(self):
+        """Tiếng Việt và unicode không bị escape."""
+        answer_key     = {1: 'A'}
+        student_answers = {1: 'A'}
+        json_str = export_result_json(1, 10.0, student_answers, answer_key,
+                                      image_path="đề_thi_môn_vật_lý.jpg")
+        assert "đề_thi_môn_vật_lý.jpg" in json_str
+
+
+# ============================================================
+# TEST CLASS 6: Test thực tế với ảnh từ TV3
+# ============================================================
+
+class TestWithRealImage:
     """
-    Tạo ảnh nhị phân mock cho test.
-    
-    Args:
-        answers (dict): {1: 'A', 2: 'C', 3: 'B', 4: 'D'}
-        num_questions (int): Số câu hỏi
-        choices_per_question (int): Số lựa chọn mỗi câu
-    
-    Returns:
-        np.ndarray: Ảnh nhị phân mock
+    Test tích hợp với ảnh thật từ TV3 (nếu có trong data/processed/).
+    Bỏ qua tự động nếu không tìm thấy file.
     """
-    # TODO: Bước 1 - Tạo ảnh đen với kích thước phù hợp
-    # TODO: Bước 2 - Tính kích thước mỗi bubble
-    # TODO: Bước 3 - Lặp qua answers và vẽ vùng trắng cho các ô được chọn
-    # TODO: Bước 4 - Return ảnh mock
-    pass
+
+    NAN_CHINH_PATH = Path(__file__).parent.parent / \
+        "data" / "processed" / "test_sheet_02_07_nan_chinh.jpg"
+    ANSWER_KEY_PATH = Path(__file__).parent.parent / \
+        "data" / "answer_keys" / "sample_answer_key.json"
+
+    @pytest.fixture
+    def answer_key(self):
+        """Load đáp án chuẩn từ JSON."""
+        if not self.ANSWER_KEY_PATH.exists():
+            pytest.skip(f"Không tìm thấy file đáp án: {self.ANSWER_KEY_PATH}")
+        with open(self.ANSWER_KEY_PATH, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        return {int(k): v for k, v in raw["answers"].items()}
+
+    def test_real_image_loads(self):
+        """Ảnh nan_chinh phải đọc được và có shape đúng."""
+        if not self.NAN_CHINH_PATH.exists():
+            pytest.skip(f"Không tìm thấy: {self.NAN_CHINH_PATH}")
+        img = cv2.imread(str(self.NAN_CHINH_PATH))
+        assert img is not None
+        h, w = img.shape[:2]
+        assert h == 1200 and w == 800, f"Shape khác mong đợi: {img.shape}"
+
+    def test_segment_real_image(self):
+        """Phân đoạn ảnh thật phải trả về ảnh nhị phân hợp lệ."""
+        if not self.NAN_CHINH_PATH.exists():
+            pytest.skip(f"Không tìm thấy: {self.NAN_CHINH_PATH}")
+        img  = cv2.imread(str(self.NAN_CHINH_PATH))
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        binary = segment_bubbles(gray, "adaptive")
+        assert binary.ndim == 2
+        assert binary.dtype == np.uint8
+        assert binary.max() == 255, "Phải có pixel trắng (vùng được tô)"
+        assert binary.min() == 0,   "Phải có pixel đen (nền)"
+
+    def test_grade_real_image_returns_valid_result(self, answer_key):
+        """
+        Chạy toàn bộ pipeline với ảnh thật.
+        Kiểm tra: correct_count hợp lệ, score trong [0,10], answers đủ 20 câu.
+        """
+        if not self.NAN_CHINH_PATH.exists():
+            pytest.skip(f"Không tìm thấy: {self.NAN_CHINH_PATH}")
+
+        img    = cv2.imread(str(self.NAN_CHINH_PATH))
+        gray   = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        binary = segment_bubbles(gray, "adaptive")
+
+        # Chỉ chấm 20 câu (ảnh test_sheet chỉ có 20 câu)
+        key_20 = {k: v for k, v in answer_key.items() if k <= 20}
+
+        correct, score, answers = calculate_score(
+            binary,
+            key_20,
+            num_questions=20,
+            col_left_xs=_COL_LEFT_XS,
+            col_right_xs=_COL_RIGHT_XS,
+            row_ys=_ROW_YS,
+            bubble_w=_BUBBLE_W,
+            bubble_h=_BUBBLE_H,
+        )
+
+        # Assertions cơ bản
+        assert 0 <= correct <= 20,      f"correct_count ngoài khoảng: {correct}"
+        assert 0.0 <= score <= 10.0,    f"score ngoài khoảng: {score}"
+        assert len(answers) == 20,      f"Phải có 20 câu, được {len(answers)}"
+
+        # Tất cả đáp án phải là A/B/C/D hoặc '?'
+        valid_choices = {'A', 'B', 'C', 'D', '?'}
+        for q, ans in answers.items():
+            assert ans in valid_choices, f"Câu {q}: đáp án không hợp lệ '{ans}'"
+
+        # In kết quả để xem (chạy với -s)
+        print(f"\n  [Real Image] correct={correct}/20, score={score}/10")
+        print(f"  Student answers: {answers}")
+
+    def test_grade_from_image_helper(self, answer_key):
+        """Test hàm grade_from_image() — pipeline tất-cả-trong-một."""
+        if not self.NAN_CHINH_PATH.exists():
+            pytest.skip(f"Không tìm thấy: {self.NAN_CHINH_PATH}")
+
+        key_20 = {k: v for k, v in answer_key.items() if k <= 20}
+        correct, score, answers = grade_from_image(
+            str(self.NAN_CHINH_PATH), key_20
+        )
+        assert isinstance(correct, int)
+        assert isinstance(score, float)
+        assert len(answers) == 20
 
 
-# Chạy tests
+# ============================================================
+# CHẠY TRỰC TIẾP (không dùng pytest)
+# ============================================================
+
+def _run_all_manual():
+    """Chạy thủ công khi không có pytest."""
+    PASS = "✅ PASS"
+    FAIL = "❌ FAIL"
+
+    def run(name, fn):
+        try:
+            fn()
+            print(f"{PASS}  {name}")
+            return True
+        except Exception as e:
+            print(f"{FAIL}  {name}  [{type(e).__name__}: {e}]")
+            return False
+
+    tests = [
+        # extract_bubble_grid
+        ("extract_roi_basic",          lambda: TestExtractBubbleGrid().test_extract_roi_basic()),
+        ("extract_roi_grayscale",      lambda: TestExtractBubbleGrid().test_extract_roi_grayscale()),
+        ("extract_roi_full_image",     lambda: TestExtractBubbleGrid().test_extract_roi_default_full_image()),
+        ("extract_roi_out_of_bounds",  lambda: TestExtractBubbleGrid().test_extract_roi_out_of_bounds_raises()),
+        ("extract_roi_content",        lambda: TestExtractBubbleGrid().test_extract_roi_preserves_content()),
+
+        # segment_bubbles — cần fixture nên khởi tạo trực tiếp
+        ("segment_adaptive_binary",    lambda: _test_segment_helper("adaptive")),
+        ("segment_otsu_binary",        lambda: _test_segment_helper("otsu")),
+        ("segment_binary_threshold",   lambda: _test_segment_helper("binary")),
+        ("segment_color_input",        lambda: TestSegmentBubbles().test_color_input_auto_convert()),
+
+        # calculate_score
+        ("score_all_correct",          lambda: TestCalculateScore().test_all_correct()),
+        ("score_partial",              lambda: TestCalculateScore().test_partial_correct()),
+        ("score_all_wrong",            lambda: TestCalculateScore().test_all_wrong()),
+        ("score_blank_image",          lambda: TestCalculateScore().test_blank_image_no_answer()),
+        ("score_formula",              lambda: TestCalculateScore().test_score_formula()),
+        ("score_return_types",         lambda: TestCalculateScore().test_returns_correct_types()),
+
+        # erase noise
+        ("erase_noise_immunity",       lambda: TestEraseNoise().test_erase_noise_still_correct()),
+
+        # export json
+        ("json_valid",                 lambda: TestExportResultJson().test_json_is_valid()),
+        ("json_fields",                lambda: TestExportResultJson().test_json_fields()),
+        ("json_score_values",          lambda: TestExportResultJson().test_json_score_values()),
+        ("json_details_result",        lambda: TestExportResultJson().test_json_details_result_field()),
+        ("json_unicode",               lambda: TestExportResultJson().test_json_unicode_preserved()),
+    ]
+
+    print("\n" + "=" * 58)
+    print("   TEST MODULE grader.py — TV4")
+    print("=" * 58)
+
+    passed = sum(run(name, fn) for name, fn in tests)
+    total  = len(tests)
+
+    print("=" * 58)
+    print(f"   Kết quả: {passed}/{total} test passed")
+    print("=" * 58)
+
+    if passed == total:
+        print("🎉 Tất cả test PASS! grader.py sẵn sàng tích hợp.\n")
+    else:
+        print("⚠️  Có test FAIL. Kiểm tra lại trước khi tích hợp.\n")
+
+
+def _test_segment_helper(method: str):
+    """Helper cho segment test không dùng fixture."""
+    img = np.full((100, 100), 220, dtype=np.uint8)
+    cv2.circle(img, (50, 50), 15, 30, -1)
+    binary = segment_bubbles(img, method)
+    assert binary.ndim == 2
+    assert binary.dtype == np.uint8
+    assert set(np.unique(binary).tolist()).issubset({0, 255})
+
+
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    _run_all_manual()
