@@ -3,6 +3,11 @@ Module cấu hình cho hệ thống chấm trắc nghiệm tự động (OMR).
 
 Module này chứa các hằng số, kích thước, ngưỡng và tham số cấu hình
 cho toàn bộ pipeline xử lý.
+
+LƯU Ý VỀ ĐỒNG BỘ THAM SỐ:
+- File này lưu các giá trị THAM KHẢO và giá trị đang dùng THỰC TẾ trong main.py
+- Một số module có default khác để linh hoạt khi test
+- Xem chi tiết trong docs/THAM_SO_CAU_HINH.md
 """
 
 from typing import Dict, Tuple
@@ -24,18 +29,29 @@ NOTEBOOKS_DIR = "notebooks"
 # ============================================================================
 
 # Kích thước ảnh sau khi nắn chỉnh (pixels)
+# Giá trị này khớp với main.py: nan_chinh_anh(anh_goc, cac_goc, chieu_rong=800, chieu_cao=1200)
 WARPED_IMAGE_WIDTH = 800
 WARPED_IMAGE_HEIGHT = 1200
 
 # Tham số cho Gaussian Blur
+# Giá trị mặc định trong preprocessing.py: kich_thuoc=5
+# Giá trị dùng trong main.py: kich_thuoc=5
 GAUSSIAN_KERNEL_SIZE = 5  # Phải là số lẻ
 
 # Tham số cho Median Blur
+# Giá trị mặc định trong preprocessing.py: kich_thuoc=5
 MEDIAN_KERNEL_SIZE = 5  # Phải là số lẻ
 
 # Tham số cho Canny Edge Detection
-CANNY_LOW_THRESHOLD = 50
-CANNY_HIGH_THRESHOLD = 150
+# Giá trị mặc định trong transform.py: nguong_thap=30, nguong_cao=100
+# Giá trị dùng trong main.py: nguong_thap=50, nguong_cao=150
+CANNY_LOW_THRESHOLD = 50   # Giá trị thực tế đang dùng trong main.py
+CANNY_HIGH_THRESHOLD = 150  # Giá trị thực tế đang dùng trong main.py
+
+# LƯU Ý: 
+# - preprocessing.py có default khác (kich_thuoc=5) - KHỚP với config
+# - transform.py có default khác (nguong_thap=30, nguong_cao=100) - KHÁC với config
+# - main.py ghi đè bằng giá trị cụ thể (50, 150) - KHỚP với config này
 
 
 # ============================================================================
@@ -43,10 +59,28 @@ CANNY_HIGH_THRESHOLD = 150
 # ============================================================================
 
 # Tọa độ vùng chứa các ô đáp án (cần điều chỉnh theo template đề thi)
-ROI_X = 100  # Tọa độ x góc trên-trái
-ROI_Y = 200  # Tọa độ y góc trên-trái
-ROI_WIDTH = 600  # Chiều rộng ROI
-ROI_HEIGHT = 800  # Chiều cao ROI
+# Đo từ ảnh thật sau khi nắn chỉnh (800x1200)
+# Đo từ test_sheet_02.jpg (1440x2560) và chuyển đổi về 800x1200
+ROI_X = 157        # Tọa độ x góc trên-trái
+ROI_Y = 797        # Tọa độ y góc trên-trái
+ROI_WIDTH = 391    # Chiều rộng ROI
+ROI_HEIGHT = 319   # Chiều cao ROI
+
+# Tọa độ vùng chứa mã đề thi (ở góc trên bên phải)
+# Đo từ ảnh thật: Mã đề "101" (3 chữ số xếp dọc)
+# Đo từ test_sheet_02.jpg (1440x2560) và chuyển đổi về 800x1200
+EXAM_CODE_ROI_X = 406
+EXAM_CODE_ROI_Y = 437
+EXAM_CODE_ROI_WIDTH = 112
+EXAM_CODE_ROI_HEIGHT = 322
+
+# Tọa độ vùng chứa số báo danh (ở giữa trên)
+# Đo từ ảnh thật: 6 chữ số xếp dọc
+# Đo từ test_sheet_02.jpg (1440x2560) và chuyển đổi về 800x1200
+STUDENT_ID_ROI_X = 161
+STUDENT_ID_ROI_Y = 439
+STUDENT_ID_ROI_WIDTH = 207
+STUDENT_ID_ROI_HEIGHT = 323
 
 
 # ============================================================================
@@ -61,6 +95,14 @@ CHOICES_PER_QUESTION = 4
 
 # Danh sách các lựa chọn
 CHOICES = ['A', 'B', 'C', 'D']
+
+# Cấu hình mã đề thi
+NUM_EXAM_CODE_DIGITS = 3  # Số chữ số của mã đề (101, 102, 103)
+CHOICES_PER_EXAM_CODE_DIGIT = 10  # Mỗi chữ số có 10 lựa chọn (0-9)
+
+# Cấu hình mã sinh viên (tùy chọn)
+NUM_STUDENT_ID_DIGITS = 8  # Số chữ số của mã sinh viên
+CHOICES_PER_STUDENT_ID_DIGIT = 10  # Mỗi chữ số có 10 lựa chọn (0-9)
 
 
 # ============================================================================

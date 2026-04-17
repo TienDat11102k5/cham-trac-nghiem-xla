@@ -29,6 +29,7 @@ cham-trac-nghiem-xla/
 │   ├── config.py               # Cấu hình hệ thống (hằng số, ngưỡng, kích thước)
 │   ├── preprocessing.py        # Module tiền xử lý ảnh
 │   ├── transform.py            # Module biến đổi hình học
+│   ├── reader.py               # Module đọc thông tin (mã đề, MSSV)
 │   ├── grader.py               # Module chấm điểm
 │   └── utils.py                # Các hàm tiện ích
 │
@@ -92,9 +93,10 @@ jupyter notebook notebooks/pipeline_demo.ipynb
 4. **Phát hiện biên** (`transform.detect_edges`)
 5. **Tìm 4 góc tờ giấy** (`transform.find_document_corners`)
 6. **Nắn chỉnh ảnh** (`transform.apply_perspective_transform`)
-7. **Trích xuất vùng đáp án** (`grader.extract_bubble_grid`)
-8. **Phân đoạn ô trắc nghiệm** (`grader.segment_bubbles`)
-9. **Chấm điểm** (`grader.calculate_score`)
+7. **Đọc mã đề** (`reader.read_exam_code`) - Tùy chọn
+8. **Trích xuất vùng đáp án** (`grader.extract_bubble_grid`)
+9. **Phân đoạn ô trắc nghiệm** (`grader.segment_bubbles`)
+10. **Chấm điểm** (`grader.calculate_score`)
 
 ## 📝 Format đáp án chuẩn (JSON)
 

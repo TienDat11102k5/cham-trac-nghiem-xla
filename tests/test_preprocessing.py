@@ -51,7 +51,7 @@ class TestDocAnh:
         """Test đọc file không phải ảnh (file text) - phải raise ValueError"""
         # Bước 1 - Tạo file text giả dạng .jpg
         file_text = tmp_path / "file_gia_mao.jpg"
-        file_text.write_text("Đây là file text, không phải ảnh!")
+        file_text.write_text("This is a text file, not an image!", encoding='utf-8')
 
         # Bước 2 - doc_anh() phải nhận ra file bị hỏng / không phải ảnh
         with pytest.raises(ValueError) as thong_tin_loi:
@@ -247,7 +247,7 @@ class TestXuLyAnhThucTe:
                 ket_qua_tong.append(duong_dan_luu.name)
 
         # In báo cáo tóm tắt (hiển thị khi chạy pytest -v -s)
-        print(f"\n\n  📁 data/processed/ — {len(ket_qua_tong)} file đã tạo:")
+        print(f"\n\n data/processed/ — {len(ket_qua_tong)} file đã tạo:")
         for ten in sorted(ket_qua_tong):
             print(f"     ✓ {ten}")
 
