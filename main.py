@@ -18,7 +18,13 @@ from tkinter import filedialog
 
 from src.preprocessing import doc_anh, chuyen_xam, loc_nhieu
 from src.transform import tim_canh, tim_goc_giay, nan_chinh_anh
-from src.reader import extract_exam_code_region, read_exam_code, extract_student_id_region, read_student_id, visualize_all_regions
+from src.reader import (
+    phat_hien_anchor, phan_loai_vung_roi,
+    extract_exam_code_region, read_exam_code,
+    extract_student_id_region, read_student_id,
+    visualize_all_regions, visualize_anchors,
+)
+from src.grader import grade_from_image
 from src.config import SAMPLE_ANSWER_KEY
 
 
@@ -145,71 +151,100 @@ def main(image_path: str, answer_key_path: Optional[str] = None, save_images: bo
                 luu_anh_trung_gian(anh_nan_chinh, "05_nan_chinh.jpg")
             print("✓")
         
-        # Bước 7 - ĐỌC MÃ ĐỀ VÀ MÃ SINH VIÊN
-        print("[7/8] Đọc mã đề thi và mã sinh viên...")
+        # Bước 7 - TỰ ĐỘNG PHÁT HIỆN VÙNG ROI (Anchor-based Detection)
+        print("[7/8] Tự động phát hiện vùng ROI...")
         try:
-            # Cắt vùng ROI sử dụng tọa độ từ config
-            vung_ma_de = extract_exam_code_region(anh_nan_chinh)
-            vung_mssv = extract_student_id_region(anh_nan_chinh)
+            # Phát hiện anchor markers trên ảnh nắn chỉnh
+            anchors = phat_hien_anchor(anh_nan_chinh)
+            print(f"      ✓ Tìm thấy {len(anchors)} anchor markers")
             
-            # Lưu ảnh vùng ROI để debug
+            # Phân loại vùng ROI từ anchor
+            rois = phan_loai_vung_roi(anchors, *anh_nan_chinh.shape[:2])
+            print(f"      ✓ SBD: {rois['sbd']}")
+            print(f"      ✓ Mã đề: {rois['ma_de']}")
+            print(f"      ✓ Đáp án: {rois['dap_an']}")
+            
+            # Cắt vùng ROI tự động
+            vung_ma_de = extract_exam_code_region(anh_nan_chinh,
+                *rois['ma_de'])
+            vung_mssv = extract_student_id_region(anh_nan_chinh,
+                *rois['sbd'])
+            
+            # Lưu ảnh debug
             if save_images:
-                anh_roi = visualize_all_regions(anh_nan_chinh)
+                anh_roi = visualize_all_regions(anh_nan_chinh, rois=rois)
                 luu_anh_trung_gian(anh_roi, "06_roi_regions.jpg")
                 luu_anh_trung_gian(vung_ma_de, "06a_ma_de_region.jpg")
                 luu_anh_trung_gian(vung_mssv, "06b_mssv_region.jpg")
+                anh_anchor = visualize_anchors(anh_nan_chinh, anchors)
+                luu_anh_trung_gian(anh_anchor, "06c_anchors.jpg")
             
-            # Đọc mã đề thi - thử nhiều phương pháp
-            try:
-                ma_de = read_exam_code(vung_ma_de, num_digits=3, threshold_method="adaptive")
-            except ValueError as e1:
-                print(f"      ⚠️  Adaptive failed: {e1}")
+            # Đọc mã đề — thử nhiều phương pháp threshold
+            ma_de = "N/A"
+            for method in ["otsu", "adaptive", "binary"]:
                 try:
-                    ma_de = read_exam_code(vung_ma_de, num_digits=3, threshold_method="otsu")
-                except ValueError as e2:
-                    print(f"      ⚠️  Otsu failed: {e2}")
-                    try:
-                        ma_de = read_exam_code(vung_ma_de, num_digits=3, threshold_method="binary")
-                    except ValueError as e3:
-                        print(f"      ⚠️  Binary failed: {e3}")
-                        ma_de = "N/A"
+                    ma_de = read_exam_code(vung_ma_de, num_digits=3,
+                                           threshold_method=method)
+                    break
+                except ValueError as e:
+                    print(f"      ⚠️  Đọc mã đề ({method}): {e}")
             
-            # Đọc mã sinh viên (6 chữ số)
-            try:
-                ma_sinh_vien = read_student_id(vung_mssv, num_digits=6, threshold_method="adaptive")
-            except ValueError:
+            # Đọc SBD — thử nhiều phương pháp threshold
+            ma_sinh_vien = "N/A"
+            for method in ["otsu", "adaptive", "binary"]:
                 try:
-                    ma_sinh_vien = read_student_id(vung_mssv, num_digits=6, threshold_method="otsu")
+                    ma_sinh_vien = read_student_id(vung_mssv, num_digits=6,
+                                                   threshold_method=method)
+                    break
                 except ValueError:
-                    try:
-                        ma_sinh_vien = read_student_id(vung_mssv, num_digits=6, threshold_method="binary")
-                    except ValueError:
-                        ma_sinh_vien = "N/A"
+                    pass
             
             print(f"      → Mã đề: {ma_de}")
-            print(f"      → Mã sinh viên: {ma_sinh_vien}")
-            print(f"      → Xem ảnh ROI tại: output/06a_ma_de_region.jpg và output/06b_mssv_region.jpg")
+            print(f"      → Số báo danh: {ma_sinh_vien}")
             
         except Exception as e:
-            print(f"      ⚠️  Lỗi: {e}")
+            print(f"      ⚠️  Lỗi phát hiện ROI: {e}")
             ma_de = "N/A"
             ma_sinh_vien = "N/A"
+            rois = None
         
-        # Bước 8 - CHẤM ĐIỂM (TODO: Chờ module grader hoàn thành)
-        print("[8/8] Chấm điểm...", end=" ")
-        print("⚠️  (Module grader chưa hoàn thành)")
+        # Bước 8 - CHẤM ĐIỂM (Tích hợp grader module)
+        print("[8/8] Chấm điểm...")
+        
+        # Đọc đáp án chuẩn
+        if answer_key_path:
+            dap_an = doc_dap_an(answer_key_path)
+        else:
+            dap_an = SAMPLE_ANSWER_KEY
+        
+        # Tạo đường dẫn file JSON output
+        ten_anh = Path(image_path).stem
+        json_output = f"data/answer_keys/result_{ten_anh}.json"
+        
+        # Gọi grader: auto-detect grid + chấm điểm + xuất kết quả
+        try:
+            correct_count, score, student_answers = grade_from_image(
+                warped_image=anh_nan_chinh,
+                answer_key=dap_an,
+                num_questions=20,
+                save_json=json_output,
+                image_path=image_path,
+                so_bao_danh=ma_sinh_vien,
+                ma_de=ma_de
+            )
+        except Exception as e:
+            print(f"      ⚠️  Lỗi chấm điểm: {e}")
+            import traceback
+            traceback.print_exc()
         
         print()
         print("=" * 60)
-        print("HOÀN THÀNH TIỀN XỬ LÝ VÀ NẮN CHỈNH")
+        print("HOÀN THÀNH PIPELINE OMR")
         print("=" * 60)
         
         if save_images:
-            print(f"✓ Các ảnh trung gian đã được lưu vào thư mục: output/")
-        
-        print()
-        print("⚠️  LƯU Ý: Module chấm điểm (grader.py) chưa được triển khai.")
-        print("   Sau khi hoàn thành grader.py, hệ thống sẽ tự động chấm điểm.")
+            print(f"✓ Ảnh trung gian: output/")
+        print(f"✓ Kết quả JSON: {json_output}")
         print()
         
     except FileNotFoundError as e:

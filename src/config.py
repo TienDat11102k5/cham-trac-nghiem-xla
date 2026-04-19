@@ -55,28 +55,48 @@ CANNY_HIGH_THRESHOLD = 150  # Giá trị thực tế đang dùng trong main.py
 
 
 # ============================================================================
-# CẤU HÌNH VÙNG ROI (Region of Interest)
+# CẤU HÌNH PHÁT HIỆN ANCHOR MARKERS (Tự động tìm vùng ROI)
 # ============================================================================
+# Anchor markers = các ô vuông đen in sẵn trên phiếu trắc nghiệm.
+# Hệ thống dùng anchor để tính tọa độ ROI tương đối → chạy đúng mọi ảnh.
+# Giá trị dưới đây xác định bằng phân tích thực tế trên ảnh 800×1200.
 
-# Tọa độ vùng chứa các ô đáp án (cần điều chỉnh theo template đề thi)
-# Đo từ ảnh thật sau khi nắn chỉnh (800x1200)
-# Đo từ test_sheet_02.jpg (1440x2560) và chuyển đổi về 800x1200
-ROI_X = 157        # Tọa độ x góc trên-trái
-ROI_Y = 797        # Tọa độ y góc trên-trái
+# Diện tích anchor marker (pixel²) — lọc contour theo diện tích
+ANCHOR_MIN_AREA = 250       # Loại bỏ nhiễu nhỏ
+ANCHOR_MAX_AREA = 600       # Loại bỏ bubble và vùng lớn
+
+# Extent tối thiểu — tỉ lệ area/bounding_rect
+# Anchor (vuông đặc): extent > 0.82 | Bubble (tròn): extent < 0.76
+ANCHOR_MIN_EXTENT = 0.82
+
+# Solidity tối thiểu — tỉ lệ area/convex_hull_area
+ANCHOR_MIN_SOLIDITY = 0.93
+
+# Z-score threshold cho đọc bubble (reader + grader)
+# Z >= threshold → xác nhận bubble được tô
+# Z-score miễn nhiễm tẩy xóa bẩn: bubble bị tẩy có z thấp hơn bubble mới tô
+ZSCORE_THRESHOLD = 1.4
+
+# Tỉ lệ pixel tối thiểu so với diện tích bubble (fallback khi std ~ 0)
+MIN_FILL_RATIO = 0.15
+
+# ============================================================================
+# CẤU HÌNH VÙNG ROI (Region of Interest) — CHỈ DÙNG LÀM THAM KHẢO
+# ============================================================================
+# ⚠️  DEPRECATED: Các giá trị dưới đây chỉ để tham khảo.
+# Hệ thống hiện dùng auto-detect qua anchor markers (xem reader.py).
+# Giá trị gốc đo từ test_sheet_02.jpg (1440x2560) → chuyển về 800x1200.
+
+ROI_X = 157        # Tọa độ x góc trên-trái vùng đáp án
+ROI_Y = 797        # Tọa độ y góc trên-trái vùng đáp án
 ROI_WIDTH = 391    # Chiều rộng ROI
 ROI_HEIGHT = 319   # Chiều cao ROI
 
-# Tọa độ vùng chứa mã đề thi (ở góc trên bên phải)
-# Đo từ ảnh thật: Mã đề "101" (3 chữ số xếp dọc)
-# Đo từ test_sheet_02.jpg (1440x2560) và chuyển đổi về 800x1200
 EXAM_CODE_ROI_X = 406
 EXAM_CODE_ROI_Y = 437
 EXAM_CODE_ROI_WIDTH = 112
 EXAM_CODE_ROI_HEIGHT = 322
 
-# Tọa độ vùng chứa số báo danh (ở giữa trên)
-# Đo từ ảnh thật: 6 chữ số xếp dọc
-# Đo từ test_sheet_02.jpg (1440x2560) và chuyển đổi về 800x1200
 STUDENT_ID_ROI_X = 161
 STUDENT_ID_ROI_Y = 439
 STUDENT_ID_ROI_WIDTH = 207
@@ -198,10 +218,48 @@ def validate_config() -> bool:
         - Ngưỡng phải nằm trong khoảng hợp lệ
         - Số câu hỏi và lựa chọn phải > 0
     """
-    # TODO: Bước 1 - Kiểm tra GAUSSIAN_KERNEL_SIZE và MEDIAN_KERNEL_SIZE là số lẻ
-    # TODO: Bước 2 - Kiểm tra ADAPTIVE_BLOCK_SIZE là số lẻ
-    # TODO: Bước 3 - Kiểm tra NUM_QUESTIONS > 0 và CHOICES_PER_QUESTION > 0
-    # TODO: Bước 4 - Kiểm tra BUBBLE_FILLED_THRESHOLD trong khoảng [0, 1]
-    # TODO: Bước 5 - Kiểm tra CANNY_LOW_THRESHOLD < CANNY_HIGH_THRESHOLD
-    # TODO: Bước 6 - Return True nếu tất cả hợp lệ, False nếu không
-    pass
+    errors = []
+
+    # Bước 1 - Kiểm tra kernel size là số lẻ dương
+    for name, val in [("GAUSSIAN_KERNEL_SIZE", GAUSSIAN_KERNEL_SIZE),
+                      ("MEDIAN_KERNEL_SIZE", MEDIAN_KERNEL_SIZE)]:
+        if val <= 0 or val % 2 == 0:
+            errors.append(f"{name} phải là số lẻ dương, nhận được: {val}")
+
+    # Bước 2 - Kiểm tra ADAPTIVE_BLOCK_SIZE là số lẻ
+    if ADAPTIVE_BLOCK_SIZE <= 0 or ADAPTIVE_BLOCK_SIZE % 2 == 0:
+        errors.append(f"ADAPTIVE_BLOCK_SIZE phải là số lẻ dương, nhận được: {ADAPTIVE_BLOCK_SIZE}")
+
+    # Bước 3 - Kiểm tra số câu hỏi và lựa chọn > 0
+    if NUM_QUESTIONS <= 0:
+        errors.append(f"NUM_QUESTIONS phải > 0, nhận được: {NUM_QUESTIONS}")
+    if CHOICES_PER_QUESTION <= 0:
+        errors.append(f"CHOICES_PER_QUESTION phải > 0, nhận được: {CHOICES_PER_QUESTION}")
+
+    # Bước 4 - Kiểm tra BUBBLE_FILLED_THRESHOLD trong [0, 1]
+    if not (0.0 <= BUBBLE_FILLED_THRESHOLD <= 1.0):
+        errors.append(f"BUBBLE_FILLED_THRESHOLD phải trong [0, 1], nhận được: {BUBBLE_FILLED_THRESHOLD}")
+
+    # Bước 5 - Kiểm tra Canny thresholds
+    if CANNY_LOW_THRESHOLD >= CANNY_HIGH_THRESHOLD:
+        errors.append(
+            f"CANNY_LOW_THRESHOLD ({CANNY_LOW_THRESHOLD}) "
+            f"phải < CANNY_HIGH_THRESHOLD ({CANNY_HIGH_THRESHOLD})"
+        )
+
+    # Bước 6 - Kiểm tra anchor params
+    if ANCHOR_MIN_AREA >= ANCHOR_MAX_AREA:
+        errors.append(
+            f"ANCHOR_MIN_AREA ({ANCHOR_MIN_AREA}) "
+            f"phải < ANCHOR_MAX_AREA ({ANCHOR_MAX_AREA})"
+        )
+    if not (0.0 < ZSCORE_THRESHOLD < 10.0):
+        errors.append(f"ZSCORE_THRESHOLD phải trong (0, 10), nhận được: {ZSCORE_THRESHOLD}")
+
+    if errors:
+        for e in errors:
+            print(f"⚠️  Config error: {e}")
+        return False
+
+    return True
+
