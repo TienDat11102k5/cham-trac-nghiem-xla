@@ -208,19 +208,26 @@ def phan_loai_vung_roi(anchors: List[Dict],
         hang_duoi_da = [a for a in nhom_duoi_by_y if a['cy'] >= y_mid_duoi]
 
         if hang_tren_da and hang_duoi_da:
+            # Kiểm tra xem hàng trên và hàng dưới có thực sự khác hàng không?
+            # Nếu ảnh bị cắt mất phần dưới (như test_sheet_03), 
+            # 2 anchor cùng hàng trên sẽ bị ép chia vào hang_tren_da và hang_duoi_da.
+            y_diff = hang_duoi_da[-1]['cy'] - hang_tren_da[0]['cy']
+            
             # X: lấy anchor xa nhất trái/phải → mở rộng thêm
             all_x = [a['cx'] for a in nhom_duoi]
             x_min = int(min(all_x) - 15)
             x_max = int(max(all_x) + 15)
 
             # Y top: Ngay dưới hàng anchor trên (+ offset header "A B C D")
-            # Từ dữ liệu: anchor hàng trên y≈789, bubble đầu tiên y≈823
-            # → offset = ~34px = 1.6 * anchor_h (≈21)
             anchor_h_avg = np.mean([a['h'] for a in hang_tren_da])
             y_top = int(hang_tren_da[0]['cy'] + anchor_h_avg * 1.6)
 
-            # Y bottom: ngang hàng anchor dưới cùng
-            y_bot = int(hang_duoi_da[-1]['cy'] + hang_duoi_da[-1]['h'])
+            if y_diff >= anchor_h_avg * 3:
+                # Ảnh bình thường: có cả hàng trên và hàng dưới
+                y_bot = int(hang_duoi_da[-1]['cy'] + hang_duoi_da[-1]['h'])
+            else:
+                # Ảnh bị crop mất hàng dưới: quét tới gần cuối ảnh
+                y_bot = int(img_h * 0.98)
 
             roi_dap_an = (x_min, y_top, x_max - x_min, y_bot - y_top)
         else:
@@ -229,7 +236,7 @@ def phan_loai_vung_roi(anchors: List[Dict],
             x_min = int(min(all_x) - 15)
             x_max = int(max(all_x) + 15)
             y_min = int(min(all_y))
-            y_max = int(max(all_y) + nhom_duoi[-1]['h'])
+            y_max = int(img_h * 0.98) # Mở rộng xuống cuối nếu chỉ có 1 hàng
             roi_dap_an = (x_min, y_min, x_max - x_min, y_max - y_min)
 
     # Bước 4 — Fallback nếu auto-detect thất bại
