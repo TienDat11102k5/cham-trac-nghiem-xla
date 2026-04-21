@@ -1,18 +1,3 @@
-"""
-Module chấm điểm cho hệ thống chấm trắc nghiệm tự động (OMR).
-
-Nhận ảnh đã nắn chỉnh → tự động phát hiện vùng đáp án qua anchor markers
-→ phân đoạn bằng adaptive threshold → chấm điểm bằng z-score.
-
-Đặc điểm nổi bật:
-  - Dùng z-score để miễn nhiễm với tẩy xóa bẩn (dirty erase)
-  - Auto-detect vùng đáp án qua anchor markers (không hardcode tọa độ)
-  - Hỗ trợ layout 2 cột × 10 hàng = 20 câu (phiếu chuẩn THPT)
-  - Xuất kết quả JSON chuẩn
-
-Author: TV4 (refactored — auto-detect)
-"""
-
 import json
 import os
 import cv2
@@ -22,33 +7,14 @@ from typing import Dict, Tuple, Optional, List
 from src.config import ZSCORE_THRESHOLD, MIN_FILL_RATIO
 
 
-# Ký hiệu 4 lựa chọn
 _CHOICES = ['A', 'B', 'C', 'D']
 
-
-# ============================================================
-# HÀM 1: TRÍCH XUẤT VÙNG ĐÁP ÁN (ROI)
-# ============================================================
 
 def extract_bubble_grid(warped_image: np.ndarray,
                         roi_x: int = 0,
                         roi_y: int = 0,
                         roi_width: Optional[int] = None,
                         roi_height: Optional[int] = None) -> np.ndarray:
-    """
-    Cắt vùng chứa các ô đáp án (ROI) từ ảnh đã nắn chỉnh.
-
-    Args:
-        warped_image: Ảnh nắn chỉnh, shape (H, W) hoặc (H, W, 3)
-        roi_x, roi_y: Tọa độ góc trên-trái. Mặc định 0.
-        roi_width, roi_height: Kích thước. None = lấy toàn bộ.
-
-    Returns:
-        Vùng ROI, cùng dtype với ảnh đầu vào.
-
-    Raises:
-        ValueError: Nếu ROI vượt quá giới hạn ảnh.
-    """
     img_h, img_w = warped_image.shape[:2]
 
     if roi_width is None:
@@ -74,32 +40,15 @@ def extract_bubble_grid(warped_image: np.ndarray,
     return warped_image[roi_y:roi_y + roi_height, roi_x:roi_x + roi_width]
 
 
-# ============================================================
-# HÀM 2: PHÂN ĐOẠN BUBBLE (THRESHOLDING)
-# ============================================================
-
 def segment_bubbles(grid_image: np.ndarray,
                     threshold_method: str = "adaptive") -> np.ndarray:
-    """
-    Chuyển ảnh vùng đáp án sang ảnh nhị phân (vùng tô = trắng).
-
-    Args:
-        grid_image: Ảnh đầu vào, có thể là màu hoặc xám.
-        threshold_method: "adaptive" | "otsu" | "binary"
-
-    Returns:
-        Ảnh nhị phân (H, W), pixel trắng (255) = vùng được tô.
-
-    Raises:
-        ValueError: Nếu threshold_method không hợp lệ.
-    """
-    # Bước 1 — Chuyển xám nếu cần
+    # Chuyển xám nếu cần
     if grid_image.ndim == 3:
         gray = cv2.cvtColor(grid_image, cv2.COLOR_BGR2GRAY)
     else:
         gray = grid_image.copy()
 
-    # Bước 2 — Validate method
+    # Validate method
     valid_methods = ("adaptive", "otsu", "binary")
     if threshold_method not in valid_methods:
         raise ValueError(
@@ -107,7 +56,7 @@ def segment_bubbles(grid_image: np.ndarray,
             f"Các giá trị hợp lệ: {valid_methods}"
         )
 
-    # Bước 3 — Áp dụng threshold
+    # Áp dụng threshold
     if threshold_method == "adaptive":
         binary = cv2.adaptiveThreshold(
             gray, 255,
@@ -123,38 +72,18 @@ def segment_bubbles(grid_image: np.ndarray,
     else:  # "binary"
         _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
 
-    # Bước 4 — Morphological cleanup: loại nhiễu nhỏ
+    # Morphological cleanup: loại nhiễu nhỏ
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
 
     return binary
 
 
-# ============================================================
-# HÀM NỘI BỘ: ĐỌC ĐÁP ÁN 1 CÂU (Z-SCORE)
-# ============================================================
-
 def _read_one_question(binary: np.ndarray,
                        y: int,
                        xs: list,
                        bw: int = 31,
                        bh: int = 27) -> str:
-    """
-    Đọc đáp án 1 câu từ ảnh nhị phân bằng z-score.
-
-    Z-score miễn nhiễm với tẩy xóa bẩn:
-    - Bubble bị tẩy → pixel mờ → count thấp
-    - Z-score chuẩn hóa → chỉ bubble nổi bật nhất mới được chọn
-
-    Args:
-        binary: Ảnh nhị phân toàn tờ.
-        y: Tọa độ y góc trên-trái của hàng bubble.
-        xs: Danh sách tọa độ x của 4 bubble (A, B, C, D).
-        bw, bh: Kích thước vùng đọc mỗi bubble.
-
-    Returns:
-        Đáp án ('A'–'D') hoặc '?' nếu không xác định.
-    """
     img_h, img_w = binary.shape[:2]
     counts = []
 
@@ -188,39 +117,12 @@ def _read_one_question(binary: np.ndarray,
     return '?'
 
 
-# ============================================================
-# HÀM 3: PHÁT HIỆN LƯỚI BUBBLE TỰ ĐỘNG
-# ============================================================
-
 def phat_hien_luoi_bubble(binary: np.ndarray,
                           roi: Tuple[int, int, int, int],
                           num_questions: int = 20,
                           choices_per_question: int = 4,
                           gray_image: np.ndarray = None
                           ) -> Tuple[List[int], List[int], List[int]]:
-    """
-    Phát hiện vị trí lưới bubble bằng HoughCircles.
-
-    Thuật toán:
-    1. Dùng HoughCircles trên ảnh xám → phát hiện TẤT CẢ bubble (cả tô + trống)
-    2. Lọc circles trong vùng ROI
-    3. Phân cụm tâm circles theo y → hàng, theo x → cột
-    4. Chia thành 2 nửa (cột trái + cột phải)
-
-    Ưu điểm so với contour detection:
-    - HoughCircles phát hiện đường viền tròn → bắt được cả bubble trống
-    - Contour detection chỉ phát hiện vùng tô đen → bỏ sót bubble trống
-
-    Args:
-        binary: Ảnh nhị phân toàn tờ (cho chấm điểm sau này)
-        roi: (x, y, w, h) vùng đáp án
-        num_questions: Tổng số câu (mặc định 20)
-        choices_per_question: Số lựa chọn (mặc định 4)
-        gray_image: Ảnh xám gốc cho HoughCircles (nếu None → dùng binary)
-
-    Returns:
-        Tuple (col_left_xs, col_right_xs, row_ys)
-    """
     rx, ry, rw, rh = roi
     rows_per_col = num_questions // 2  # 10 hàng mỗi cột
 
@@ -318,7 +220,6 @@ def phat_hien_luoi_bubble(binary: np.ndarray,
 
 
 def _cluster_1d(values: list, min_gap: float = 15) -> List[float]:
-    """Phân cụm dãy số 1D: gộp các giá trị gần nhau (< min_gap) thành 1 cụm."""
     if not values:
         return []
     clusters = [[values[0]]]
@@ -347,11 +248,6 @@ def _fallback_grid(rx, ry, rw, rh, rows_per_col, choices_per_question):
 
     return col_left_xs, col_right_xs, row_ys
 
-
-# ============================================================
-# HÀM 4: CHẤM ĐIỂM
-# ============================================================
-
 def calculate_score(segmented_image: np.ndarray,
                     answer_key: Dict[int, str],
                     num_questions: int = 20,
@@ -362,24 +258,6 @@ def calculate_score(segmented_image: np.ndarray,
                     bubble_w: int = 31,
                     bubble_h: int = 27
                     ) -> Tuple[int, float, Dict[int, str]]:
-    """
-    Chấm điểm từ ảnh nhị phân, so sánh với đáp án chuẩn.
-
-    Hỗ trợ 2 chế độ:
-    - Layout tọa độ: dùng khi truyền col_left_xs, col_right_xs, row_ys
-    - Layout tự động (grid đều): dùng khi các tham số = None
-
-    Args:
-        segmented_image: Ảnh nhị phân (H, W).
-        answer_key: Đáp án chuẩn {1: 'A', 2: 'C', ...}.
-        num_questions: Tổng số câu. Mặc định 20.
-        choices_per_question: Số lựa chọn. Mặc định 4.
-        col_left_xs, col_right_xs, row_ys: Tọa độ grid. None = chia đều.
-        bubble_w, bubble_h: Kích thước vùng đọc mỗi bubble.
-
-    Returns:
-        Tuple (correct_count, score, student_answers)
-    """
     student_answers: Dict[int, str] = {}
     correct_count = 0
     img_h, img_w = segmented_image.shape[:2]
@@ -447,10 +325,6 @@ def calculate_score(segmented_image: np.ndarray,
     return correct_count, score, student_answers
 
 
-# ============================================================
-# HÀM 5: XUẤT KẾT QUẢ JSON
-# ============================================================
-
 def export_result_json(correct_count: int,
                        score: float,
                        student_answers: Dict[int, str],
@@ -458,21 +332,6 @@ def export_result_json(correct_count: int,
                        image_path: str = "",
                        so_bao_danh: str = "N/A",
                        ma_de: str = "N/A") -> str:
-    """
-    Xuất kết quả chấm điểm ra chuỗi JSON chuẩn.
-
-    Args:
-        correct_count: Số câu đúng.
-        score: Điểm số thang 10.
-        student_answers: Đáp án học sinh.
-        answer_key: Đáp án chuẩn.
-        image_path: Đường dẫn ảnh gốc.
-        so_bao_danh: Số báo danh đã đọc.
-        ma_de: Mã đề đã đọc.
-
-    Returns:
-        Chuỗi JSON đã indent.
-    """
     total = len(answer_key)
     details = {}
     for q_num in sorted(answer_key.keys()):
@@ -505,27 +364,12 @@ def export_result_json(correct_count: int,
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
-# ============================================================
-# HÀM 6: IN BẢNG KẾT QUẢ RA TERMINAL
-# ============================================================
-
 def print_result_table(correct_count: int,
                        score: float,
                        student_answers: Dict[int, str],
                        answer_key: Dict[int, str],
                        so_bao_danh: str = "N/A",
                        ma_de: str = "N/A") -> None:
-    """
-    In bảng kết quả chấm điểm ra terminal.
-
-    Args:
-        correct_count: Số câu đúng.
-        score: Điểm thang 10.
-        student_answers: Đáp án học sinh.
-        answer_key: Đáp án chuẩn.
-        so_bao_danh: Số báo danh.
-        ma_de: Mã đề.
-    """
     total = len(answer_key)
     print("\n" + "=" * 52)
     print("   KẾT QUẢ CHẤM TRẮC NGHIỆM TỰ ĐỘNG (OMR)")
@@ -547,11 +391,6 @@ def print_result_table(correct_count: int,
 
     print("=" * 52 + "\n")
 
-
-# ============================================================
-# HÀM 7: PIPELINE ĐẦY ĐỦ — AUTO-DETECT + CHẤM ĐIỂM
-# ============================================================
-
 def grade_from_image(warped_image: np.ndarray,
                      answer_key: Dict[int, str],
                      num_questions: int = 20,
@@ -559,21 +398,6 @@ def grade_from_image(warped_image: np.ndarray,
                      image_path: str = "",
                      so_bao_danh: str = "N/A",
                      ma_de: str = "N/A") -> Tuple[int, float, Dict[int, str]]:
-    """
-    Pipeline đầy đủ: ảnh nắn chỉnh → auto-detect grid → chấm điểm.
-
-    Args:
-        warped_image: Ảnh đã nắn chỉnh (output bước 6).
-        answer_key: Đáp án chuẩn.
-        num_questions: Số câu (mặc định 20).
-        save_json: Đường dẫn file JSON output. None = không lưu.
-        image_path: Đường dẫn ảnh gốc (để ghi vào JSON).
-        so_bao_danh: SBD đã đọc từ reader.
-        ma_de: Mã đề đã đọc từ reader.
-
-    Returns:
-        Tuple (correct_count, score, student_answers)
-    """
     # Lọc answer_key chỉ lấy câu <= num_questions
     answer_key = {k: v for k, v in answer_key.items() if k <= num_questions}
 
@@ -586,7 +410,7 @@ def grade_from_image(warped_image: np.ndarray,
         roi_dap_an = rois['dap_an']
         print(f"   ✓ Auto-detect vùng đáp án: {roi_dap_an}")
     except ValueError as e:
-        print(f"   ⚠️  Auto-detect thất bại: {e}")
+        print(f"    Auto-detect thất bại: {e}")
         print(f"   → Dùng fallback tọa độ tham khảo")
         from src.config import ROI_X, ROI_Y, ROI_WIDTH, ROI_HEIGHT
         roi_dap_an = (ROI_X, ROI_Y, ROI_WIDTH, ROI_HEIGHT)
@@ -628,7 +452,6 @@ def grade_from_image(warped_image: np.ndarray,
         bubble_w=bubble_w,
         bubble_h=bubble_h
     )
-
     # Bước 6 — In kết quả
     print_result_table(correct_count, score, student_answers, answer_key,
                        so_bao_danh=so_bao_danh, ma_de=ma_de)
@@ -643,5 +466,4 @@ def grade_from_image(warped_image: np.ndarray,
         with open(save_json, "w", encoding="utf-8") as f:
             f.write(json_str)
         print(f"   ✓ Đã lưu kết quả JSON: {save_json}")
-
     return correct_count, score, student_answers

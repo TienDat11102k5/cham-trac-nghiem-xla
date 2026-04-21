@@ -2,7 +2,7 @@
 
 Đồ án môn **Xử lý Ảnh** - Optical Mark Recognition System sử dụng Python và OpenCV.
 
-## 📋 Mô tả
+## Mô tả
 
 Hệ thống tự động chấm điểm bài thi trắc nghiệm từ ảnh chụp/scan, sử dụng các kỹ thuật Computer Vision:
 
@@ -12,7 +12,7 @@ Hệ thống tự động chấm điểm bài thi trắc nghiệm từ ảnh ch�
 - Phân ngưỡng (Thresholding)
 - Phân tích vùng đáp án và chấm điểm
 
-## 🏗️ Cấu trúc dự án
+## Cấu trúc dự án
 
 ```
 cham-trac-nghiem-xla/
@@ -39,7 +39,7 @@ cham-trac-nghiem-xla/
 └── README.md                   # File này
 ```
 
-## 🚀 Cài đặt
+## Cài đặt
 
 ### 1. Clone repository
 
@@ -71,7 +71,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 📖 Hướng dẫn sử dụng
+## Hướng dẫn sử dụng
 
 ### Chạy pipeline chấm điểm
 
@@ -85,7 +85,7 @@ python main.py data/raw/test_sheet_01.jpg data/answer_key.json
 jupyter notebook notebooks/pipeline_demo.ipynb
 ```
 
-## 🔧 Pipeline xử lý
+## Pipeline xử lý
 
 1. **Đọc ảnh** (`preprocessing.load_image`)
 2. **Chuyển sang ảnh xám** (`preprocessing.convert_to_grayscale`)
@@ -98,7 +98,7 @@ jupyter notebook notebooks/pipeline_demo.ipynb
 9. **Phân đoạn ô trắc nghiệm** (`grader.segment_bubbles`)
 10. **Chấm điểm** (`grader.calculate_score`)
 
-## 📝 Format đáp án chuẩn (JSON)
+## Format đáp án chuẩn (JSON)
 
 Tạo file `data/answer_key.json`:
 
@@ -113,7 +113,7 @@ Tạo file `data/answer_key.json`:
 }
 ```
 
-## 🎯 Nhiệm vụ phân công
+## Nhiệm vụ phân công
 
 ### Thành viên 1: Quản trị Hệ thống & Kiến trúc
 
@@ -159,27 +159,27 @@ Tạo file `data/answer_key.json`:
 - [ ] Tổng hợp số liệu do kiểm thử, chỉnh xác từ TV5 vào chương kết quả
 - [ ] Hoàn thiện format, lưu giữ dây dư lý do chọn thuật toán
 
-## 🛠️ Công nghệ sử dụng
+## Công nghệ sử dụng
 
 - **Python 3.8+**
 - **OpenCV 4.8+**: Xử lý ảnh
 - **NumPy**: Tính toán ma trận
 - **Jupyter Notebook**: Demo và visualization
 
-## 👥 Thành viên nhóm
+## Thành viên nhóm
 
 - Thành viên 1: [Tên] - [Nhiệm vụ]
 - Thành viên 2: [Tên] - [Nhiệm vụ]
 - Thành viên 3: [Tên] - [Nhiệm vụ]
 
-## 📚 Tài liệu tham khảo
+## Tài liệu tham khảo
 
 - [OpenCV Documentation](https://docs.opencv.org/)
 - [Canny Edge Detection](https://en.wikipedia.org/wiki/Canny_edge_detector)
 - [Perspective Transform](https://docs.opencv.org/4.x/da/d6e/tutorial_py_geometric_transformations.html)
 - [Adaptive Thresholding](https://docs.opencv.org/4.x/d7/d4d/tutorial_py_thresholding.html)
 
-## 📄 License
+## License
 
 Dự án này được phát triển cho mục đích học tập.
 

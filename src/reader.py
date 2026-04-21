@@ -1,18 +1,4 @@
-"""
-Module đọc thông tin từ phiếu trắc nghiệm (OMR Reader).
-
-Module này chứa các hàm để tự động phát hiện và đọc:
-- Số báo danh (SBD) — student ID
-- Mã đề thi — exam code
-- Vùng đáp án — answer region
-
-Kỹ thuật chính:
-- Anchor-based ROI Detection: Dùng ô vuông đen làm mốc tính tọa độ tự động
-- Z-score: Đọc bubble chính xác, miễn nhiễm tẩy xóa bẩn
-- Contour Analysis: Phân loại anchor vs bubble qua extent + solidity
-
-Thành viên phụ trách: TV4 (refactored)
-"""
+"""OMR Reader: Đọc SBD, mã đề, đáp án từ phiếu trắc nghiệm."""
 
 import cv2
 import numpy as np
@@ -24,77 +10,51 @@ from src.config import (
 )
 
 
-# ============================================================================
-# HÀM PHÁT HIỆN ANCHOR MARKERS (Cốt lõi auto-detect)
-# ============================================================================
-
 def phat_hien_anchor(warped_image: np.ndarray) -> List[Dict]:
-    """
-    Phát hiện các ô vuông đen (anchor markers) trên ảnh đã nắn chỉnh.
-
-    Thuật toán:
-    1. Chuyển xám + Otsu threshold → ảnh nhị phân
-    2. Morphological close → nối contour bị đứt
-    3. findContours → tìm tất cả contour
-    4. Lọc theo: diện tích, extent (> 0.82), solidity (> 0.93)
-    5. Trả về danh sách anchor đã sắp xếp
-
-    Args:
-        warped_image: Ảnh đã nắn chỉnh, shape (H, W) hoặc (H, W, 3)
-
-    Returns:
-        Danh sách dict, mỗi dict chứa:
-        - 'x', 'y', 'w', 'h': Bounding rect
-        - 'cx', 'cy': Tâm (centroid) — chính xác sub-pixel
-        - 'area', 'extent', 'solidity': Thuộc tính hình học
-
-    Raises:
-        ValueError: Nếu không tìm thấy anchor nào
-    """
-    # Bước 1 — Chuyển xám
     if warped_image.ndim == 3:
         gray = cv2.cvtColor(warped_image, cv2.COLOR_BGR2GRAY)
     else:
         gray = warped_image.copy()
 
-    # Bước 2 — Otsu threshold (tách foreground/background tự động)
+    # Otsu threshold: tách foreground/background tự động (không cần chỉ định ngưỡng)
     _, binary = cv2.threshold(gray, 0, 255,
                               cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-    # Bước 3 — Morphological close: nối contour đứt do nhiễu
+    # Morphological close: nối contour bị đứt do nhiễu (giúp anchor liền mạch)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=2)
 
-    # Bước 4 — Tìm tất cả contour
+    # Tìm tất cả contour
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL,
                                    cv2.CHAIN_APPROX_SIMPLE)
 
-    # Bước 5 — Lọc anchor theo 3 tiêu chí: area + extent + solidity
+    # Lọc anchor theo 3 tiêu chí: area + extent + solidity
     anchors = []
     for cnt in contours:
         area = cv2.contourArea(cnt)
 
-        # Lọc diện tích
+        # Lọc diện tích: anchor có kích thước cố định, bubble nhỏ hơn
         if area < ANCHOR_MIN_AREA or area > ANCHOR_MAX_AREA:
             continue
 
         x, y, w, h = cv2.boundingRect(cnt)
         rect_area = w * h
 
-        # Lọc extent (tỉ lệ area / bounding_rect)
-        # Anchor vuông đặc: extent > 0.82 | Bubble tròn: extent < 0.76
+        # Extent = area / bounding_rect: phân biệt hình vuông vs tròn
+        # Anchor vuông: extent > 0.82 | Bubble tròn: extent < 0.76
         extent = area / rect_area if rect_area > 0 else 0
         if extent < ANCHOR_MIN_EXTENT:
             continue
 
-        # Lọc solidity (tỉ lệ area / convex_hull_area)
+        # Solidity = area / convex_hull: phân biệt hình lồi vs lõm
+        # Anchor đặc: solidity > 0.93 | Bubble có lỗ: solidity < 0.9
         hull = cv2.convexHull(cnt)
         hull_area = cv2.contourArea(hull)
         solidity = area / hull_area if hull_area > 0 else 0
         if solidity < ANCHOR_MIN_SOLIDITY:
             continue
 
-        # Tính tâm chính xác bằng moments (sub-pixel)
+        # Tính tâm chính xác bằng moments (sub-pixel) thay vì trung bình
         M = cv2.moments(cnt)
         if M["m00"] > 0:
             cx = M["m10"] / M["m00"]
@@ -115,7 +75,7 @@ def phat_hien_anchor(warped_image: np.ndarray) -> List[Dict]:
             "Kiểm tra: Phiếu có ô vuông đen ở các góc không?"
         )
 
-    # Sắp xếp theo y rồi x (từ trên xuống, trái sang phải)
+    # Sắp xếp theo y rồi x (từ trên xuống, trái sang phải) để dễ định vị
     anchors.sort(key=lambda a: (a['cy'], a['cx']))
 
     return anchors
@@ -124,31 +84,7 @@ def phat_hien_anchor(warped_image: np.ndarray) -> List[Dict]:
 def phan_loai_vung_roi(anchors: List[Dict],
                        img_h: int = 1200,
                        img_w: int = 800) -> Dict[str, Tuple[int, int, int, int]]:
-    """
-    Từ danh sách anchor → phân loại và tính tọa độ 3 vùng ROI tự động.
-
-    Phân tích ảnh reference chuẩn (test_sheet_01_roi_visualization.jpg):
-    - SBD (xanh dương): bao header "SỐ BÁO DANH" + bảng bubble 6 cột × 10 hàng
-    - Mã đề (xanh lá): bao header "MÃ ĐỀ" + bảng bubble 3 cột × 10 hàng  
-    - Đáp án (đỏ): bao cả 2 cột (câu 1-10 + câu 11-20), bắt đầu từ câu 1
-
-    Layout anchor trên ảnh 800×1200:
-    - Anchor phân cách: y≈403, x≈388 (giữa SBD và Mã đề)
-    - Anchor hàng trên đáp án: y≈789 (x≈53, 166, 388, 610)
-    - Anchor hàng dưới đáp án: y≈1180 (x≈388)
-
-    Args:
-        anchors: Danh sách anchor từ phat_hien_anchor()
-        img_h: Chiều cao ảnh
-        img_w: Chiều rộng ảnh
-
-    Returns:
-        Dict với 3 key:
-        - 'sbd': (x, y, w, h) — vùng Số Báo Danh
-        - 'ma_de': (x, y, w, h) — vùng Mã Đề
-        - 'dap_an': (x, y, w, h) — vùng Đáp Án
-    """
-    # Bước 1 — Phân chia theo y: trên (< 60% ảnh) và dưới (>= 60%)
+    # Chia anchor thành 2 nhóm: trên (SBD + Mã đề) và dưới (Đáp án)
     y_threshold = img_h * 0.60
     nhom_tren = [a for a in anchors if a['cy'] < y_threshold]
     nhom_duoi = [a for a in anchors if a['cy'] >= y_threshold]
@@ -156,11 +92,12 @@ def phan_loai_vung_roi(anchors: List[Dict],
     roi_sbd = None
     roi_ma_de = None
 
-    # Bước 2 — Tính ROI cho SBD và Mã Đề
+    # Tính ROI cho SBD và Mã Đề từ nhóm trên
     if nhom_tren:
         nhom_tren_sorted = sorted(nhom_tren, key=lambda a: a['cx'])
 
-        # Tìm anchor phân cách (x gần giữa ảnh, khoảng x/2)
+        # Tìm anchor phân cách (nằm ở giữa, x ≈ 45% chiều rộng)
+        # Anchor này là ranh giới giữa SBD (trái) và Mã đề (phải)
         mid_x = img_w * 0.45
         phan_cach = [a for a in nhom_tren_sorted
                      if abs(a['cx'] - mid_x) < img_w * 0.15]
@@ -168,35 +105,34 @@ def phan_loai_vung_roi(anchors: List[Dict],
         if phan_cach:
             sep = phan_cach[0]
 
-            # ── Y START: Ngang hàng header "SỐ BÁO DANH" / "MÃ ĐỀ"
-            # Từ ảnh reference: vùng SBD bao cả header → y_start = anchor_y - offset
-            # Header nằm ~ 2 lần chiều cao anchor phía trên anchor phân cách
+            # Y START: Ngang hàng header "SỐ BÁO DANH" / "MÃ ĐỀ"
+            # Header nằm phía trên anchor phân cách khoảng 3.5 lần chiều cao anchor
             y_start = int(sep['cy'] - sep['h'] * 3.5)
             y_start = max(0, y_start)
 
-            # ── Y END: Lấy từ anchor hàng trên nhóm dưới (ranh giới đáp án)
+            # Y END: Lấy từ anchor hàng trên nhóm dưới (ranh giới với đáp án)
             if nhom_duoi:
                 nhom_duoi_sorted_y = sorted(nhom_duoi, key=lambda a: a['cy'])
                 y_end = int(nhom_duoi_sorted_y[0]['cy'] - nhom_duoi_sorted_y[0]['h'])
             else:
                 y_end = int(img_h * 0.65)
 
-            # ── SBD: từ cạnh trái ảnh đến anchor phân cách
+            # SBD: từ cạnh trái ảnh đến anchor phân cách
             x_start_sbd = int(img_w * 0.10)
             x_end_sbd = int(sep['cx'] - sep['w'] * 0.3)
 
             roi_sbd = (x_start_sbd, y_start,
                        x_end_sbd - x_start_sbd, y_end - y_start)
 
-            # ── Mã đề: từ anchor phân cách đến bên phải
+            # Mã đề: từ anchor phân cách đến bên phải
             x_start_md = int(sep['cx'] - sep['w'] * 0.3)
             x_end_md = int(img_w * 0.72)
 
             roi_ma_de = (x_start_md, y_start,
                          x_end_md - x_start_md, y_end - y_start)
 
-    # Bước 3 — Tính vùng đáp án từ nhóm dưới
-    # Theo ảnh reference: vùng đỏ bao từ câu 1 đến câu 20 (cả 2 cột)
+    # Tính vùng đáp án từ nhóm dưới
+    # Vùng đáp án bao từ câu 1 đến câu 20 (cả 2 cột)
     roi_dap_an = None
 
     if len(nhom_duoi) >= 2:
@@ -213,12 +149,12 @@ def phan_loai_vung_roi(anchors: List[Dict],
             # 2 anchor cùng hàng trên sẽ bị ép chia vào hang_tren_da và hang_duoi_da.
             y_diff = hang_duoi_da[-1]['cy'] - hang_tren_da[0]['cy']
             
-            # X: lấy anchor xa nhất trái/phải → mở rộng thêm
+            # X: lấy anchor xa nhất trái/phải → mở rộng thêm để bao toàn bộ đáp án
             all_x = [a['cx'] for a in nhom_duoi]
             x_min = int(min(all_x) - 15)
             x_max = int(max(all_x) + 15)
 
-            # Y top: Ngay dưới hàng anchor trên (+ offset header "A B C D")
+            # Y top: Ngay dưới hàng anchor trên (+ offset cho header "A B C D")
             anchor_h_avg = np.mean([a['h'] for a in hang_tren_da])
             y_top = int(hang_tren_da[0]['cy'] + anchor_h_avg * 1.6)
 
@@ -239,7 +175,7 @@ def phan_loai_vung_roi(anchors: List[Dict],
             y_max = int(img_h * 0.98) # Mở rộng xuống cuối nếu chỉ có 1 hàng
             roi_dap_an = (x_min, y_min, x_max - x_min, y_max - y_min)
 
-    # Bước 4 — Fallback nếu auto-detect thất bại
+    # Fallback: dùng tọa độ cứng nếu auto-detect thất bại
     from src.config import (
         EXAM_CODE_ROI_X, EXAM_CODE_ROI_Y, EXAM_CODE_ROI_WIDTH, EXAM_CODE_ROI_HEIGHT,
         STUDENT_ID_ROI_X, STUDENT_ID_ROI_Y, STUDENT_ID_ROI_WIDTH, STUDENT_ID_ROI_HEIGHT,
@@ -264,31 +200,11 @@ def phan_loai_vung_roi(anchors: List[Dict],
     }
 
 
-# ============================================================================
-# HÀM CẮT VÙNG ROI (Hỗ trợ auto-detect + manual)
-# ============================================================================
-
 def extract_exam_code_region(warped_image: np.ndarray,
                              roi_x: int = None,
                              roi_y: int = None,
                              roi_width: int = None,
                              roi_height: int = None) -> np.ndarray:
-    """
-    Cắt vùng chứa mã đề thi từ ảnh đã nắn chỉnh.
-
-    Nếu không truyền tọa độ → tự động phát hiện qua anchor markers.
-    Nếu truyền tọa độ → dùng tọa độ truyền vào.
-
-    Args:
-        warped_image: Ảnh đã nắn chỉnh
-        roi_x, roi_y, roi_width, roi_height: Tọa độ thủ công (None = auto)
-
-    Returns:
-        Ảnh vùng ROI chứa mã đề
-
-    Raises:
-        ValueError: Nếu ROI vượt quá giới hạn ảnh
-    """
     # Auto-detect nếu không truyền tọa độ
     if roi_x is None or roi_y is None or roi_width is None or roi_height is None:
         anchors = phat_hien_anchor(warped_image)
@@ -303,21 +219,6 @@ def extract_student_id_region(warped_image: np.ndarray,
                               roi_y: int = None,
                               roi_width: int = None,
                               roi_height: int = None) -> np.ndarray:
-    """
-    Cắt vùng chứa số báo danh (SBD) từ ảnh đã nắn chỉnh.
-
-    Nếu không truyền tọa độ → tự động phát hiện qua anchor markers.
-
-    Args:
-        warped_image: Ảnh đã nắn chỉnh
-        roi_x, roi_y, roi_width, roi_height: Tọa độ thủ công (None = auto)
-
-    Returns:
-        Ảnh vùng ROI chứa SBD
-
-    Raises:
-        ValueError: Nếu ROI vượt quá giới hạn ảnh
-    """
     if roi_x is None or roi_y is None or roi_width is None or roi_height is None:
         anchors = phat_hien_anchor(warped_image)
         rois = phan_loai_vung_roi(anchors, *warped_image.shape[:2])
@@ -331,16 +232,6 @@ def extract_answer_region(warped_image: np.ndarray,
                           roi_y: int = None,
                           roi_width: int = None,
                           roi_height: int = None) -> np.ndarray:
-    """
-    Cắt vùng chứa đáp án từ ảnh đã nắn chỉnh.
-
-    Args:
-        warped_image: Ảnh đã nắn chỉnh
-        roi_x, roi_y, roi_width, roi_height: Tọa độ thủ công (None = auto)
-
-    Returns:
-        Ảnh vùng ROI chứa đáp án
-    """
     if roi_x is None or roi_y is None or roi_width is None or roi_height is None:
         anchors = phat_hien_anchor(warped_image)
         rois = phan_loai_vung_roi(anchors, *warped_image.shape[:2])
@@ -351,19 +242,6 @@ def extract_answer_region(warped_image: np.ndarray,
 
 def _cat_vung_roi(image: np.ndarray,
                   x: int, y: int, w: int, h: int) -> np.ndarray:
-    """
-    Cắt vùng ROI với kiểm tra biên an toàn.
-
-    Args:
-        image: Ảnh nguồn
-        x, y, w, h: Tọa độ và kích thước vùng cắt
-
-    Returns:
-        Ảnh vùng đã cắt
-
-    Raises:
-        ValueError: Nếu tọa độ không hợp lệ hoặc vượt biên
-    """
     img_h, img_w = image.shape[:2]
 
     # Clip tọa độ vào giới hạn ảnh (chống lệch tâm)
@@ -381,40 +259,11 @@ def _cat_vung_roi(image: np.ndarray,
     return image[y:y + h, x:x + w]
 
 
-# ============================================================================
-# HÀM ĐỌC MÃ ĐỀ / SBD (Z-score — chống tẩy xóa bẩn)
-# ============================================================================
-
 def read_exam_code(exam_code_region: np.ndarray,
                    num_digits: int = 3,
                    choices_per_digit: int = 10,
                    threshold_method: str = "otsu") -> str:
-    """
-    Đọc mã đề từ vùng ROI đã cắt, sử dụng HoughCircles + z-score.
-
-    Thuật toán:
-    1. HoughCircles → phát hiện TẤT CẢ bubble (cả tô + trống)
-    2. Phân cụm x → cột (mỗi cột = 1 chữ số)
-    3. Phân cụm y → hàng (0-9)
-    4. Đọc pixel tô đậm → z-score → chọn chữ số nổi bật nhất
-
-    Ưu điểm so chia đều:
-    - Tự bỏ qua header ("SỐ BÁO DANH", "MÃ ĐỀ")
-    - Không phụ thuộc ROI cắt chính xác
-
-    Args:
-        exam_code_region: Ảnh vùng chứa mã đề hoặc SBD
-        num_digits: Số chữ số (3 cho mã đề, 6 cho SBD)
-        choices_per_digit: Số lựa chọn mỗi chữ số (0-9 = 10)
-        threshold_method: Phương pháp phân ngưỡng
-
-    Returns:
-        Mã đề/SBD dạng string (VD: "101", "012356")
-
-    Raises:
-        ValueError: Nếu không đọc được
-    """
-    # Bước 1 — Tiền xử lý
+    # Tiền xử lý: chuyển xám + blur
     if exam_code_region.ndim == 3:
         gray = cv2.cvtColor(exam_code_region, cv2.COLOR_BGR2GRAY)
     else:
@@ -422,12 +271,12 @@ def read_exam_code(exam_code_region: np.ndarray,
 
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Bước 2 — Phân ngưỡng (cho bước đọc pixel sau)
+    # Phân ngưỡng để đọc pixel tô đậm
     binary = _phan_nguong(gray, threshold_method)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
 
-    # Bước 3 — HoughCircles phát hiện bubble
+    # HoughCircles phát hiện bubble
     circles = cv2.HoughCircles(
         blur, cv2.HOUGH_GRADIENT,
         dp=1.2, minDist=15,
@@ -436,16 +285,16 @@ def read_exam_code(exam_code_region: np.ndarray,
     )
 
     if circles is None or len(circles[0]) < num_digits * choices_per_digit * 0.5:
-        # Fallback: dùng phương pháp chia đều cũ
+        # Fallback: dùng phương pháp chia đều cũ nếu HoughCircles thất bại
         return _read_code_grid_divide(binary, num_digits, choices_per_digit)
 
     circles = np.round(circles[0]).astype(int)
 
-    # Bước 4 — Phân cụm x → cột (mỗi cột = 1 chữ số)
+    # Phân cụm x → cột (mỗi cột = 1 chữ số)
     all_cx = sorted([int(c[0]) for c in circles])
     col_centers = _cluster_1d_simple(all_cx, min_gap=15)
 
-    # Bước 5 — Phân cụm y → hàng (0-9)
+    # Phân cụm y → hàng (0-9)
     all_cy = sorted([int(c[1]) for c in circles])
     row_centers = _cluster_1d_simple(all_cy, min_gap=15)
 
@@ -491,7 +340,7 @@ def read_exam_code(exam_code_region: np.ndarray,
         if len(row_centers) > choices_per_digit:
             row_centers = row_centers[-choices_per_digit:]
 
-    # Bước 6 — Đọc từng chữ số bằng z-score
+    # Đọc từng chữ số bằng z-score
     avg_r = int(np.mean([int(c[2]) for c in circles]))
     bw = avg_r * 2 + 4  # Kích thước vùng đọc
     bh = avg_r * 2 + 4
@@ -510,7 +359,7 @@ def read_exam_code(exam_code_region: np.ndarray,
             region = binary[y1:y2, x1:x2]
             counts.append(int(cv2.countNonZero(region)))
 
-        # Z-score
+        # Z-score: tìm chữ số nổi bật nhất (pixel tô nhiều nhất)
         arr = np.array(counts, dtype=float)
         std = arr.std()
 
@@ -602,20 +451,6 @@ def _cluster_1d_simple(values: list, min_gap: float = 15) -> list:
 def read_student_id(student_id_region: np.ndarray,
                     num_digits: int = 6,
                     threshold_method: str = "otsu") -> str:
-    """
-    Đọc số báo danh (SBD) từ vùng ROI.
-
-    Dùng HoughCircles để tự phát hiện vị trí bubble,
-    không phụ thuộc vào ROI cắt chính xác.
-
-    Args:
-        student_id_region: Ảnh vùng chứa SBD
-        num_digits: Số chữ số (mặc định 6)
-        threshold_method: Phương pháp phân ngưỡng
-
-    Returns:
-        SBD dạng string (VD: "012356")
-    """
     return read_exam_code(
         student_id_region,
         num_digits=num_digits,
@@ -624,12 +459,7 @@ def read_student_id(student_id_region: np.ndarray,
     )
 
 
-# ============================================================================
-# HÀM TIỆN ÍCH NỘI BỘ
-# ============================================================================
-
 def _phan_nguong(gray: np.ndarray, method: str) -> np.ndarray:
-    """Áp dụng phân ngưỡng theo phương pháp chỉ định."""
     if method == "adaptive":
         return cv2.adaptiveThreshold(
             gray, 255,
@@ -651,24 +481,9 @@ def _phan_nguong(gray: np.ndarray, method: str) -> np.ndarray:
         )
 
 
-# ============================================================================
-# HÀM HIỂN THỊ DEBUG
-# ============================================================================
-
 def visualize_all_regions(warped_image: np.ndarray,
                           rois: Dict[str, Tuple[int, int, int, int]] = None
                           ) -> np.ndarray:
-    """
-    Vẽ tất cả các vùng ROI lên ảnh để kiểm tra.
-
-    Args:
-        warped_image: Ảnh đã nắn chỉnh
-        rois: Dict tọa độ {'sbd': (...), 'ma_de': (...), 'dap_an': (...)}
-              Nếu None → tự động detect
-
-    Returns:
-        Ảnh có vẽ tất cả các khung ROI
-    """
     vis = warped_image.copy()
     if vis.ndim == 2:
         vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
@@ -700,16 +515,6 @@ def visualize_all_regions(warped_image: np.ndarray,
 
 def visualize_anchors(warped_image: np.ndarray,
                       anchors: List[Dict] = None) -> np.ndarray:
-    """
-    Vẽ các anchor markers đã phát hiện lên ảnh.
-
-    Args:
-        warped_image: Ảnh đã nắn chỉnh
-        anchors: Danh sách anchor. None → tự detect
-
-    Returns:
-        Ảnh có vẽ anchor markers
-    """
     vis = warped_image.copy()
     if vis.ndim == 2:
         vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)

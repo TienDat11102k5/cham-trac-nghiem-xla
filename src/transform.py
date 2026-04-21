@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 from typing import Tuple, List, Optional
 
-
 def tim_canh(anh_mo: np.ndarray,
              nguong_thap: int = 30,
              nguong_cao: int = 100) -> np.ndarray:
@@ -11,19 +10,9 @@ def tim_canh(anh_mo: np.ndarray,
 
 
 def tim_goc_giay(anh_canh: np.ndarray, auto_detect_cropped: bool = True) -> Optional[np.ndarray]:
-    """
-    Tìm 4 góc của tờ giấy thi.
-    
-    Args:
-        anh_canh: Ảnh đã phát hiện biên
-        auto_detect_cropped: Tự động phát hiện ảnh đã cắt sẵn
-        
-    Returns:
-        4 góc của tờ giấy, hoặc None nếu ảnh đã cắt sẵn
-    """
     h_anh, w_anh = anh_canh.shape
     image_area = h_anh * w_anh
-    
+
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     anh_dong = cv2.morphologyEx(anh_canh, cv2.MORPH_CLOSE, kernel, iterations=2)
     anh_dilate = cv2.dilate(anh_dong, kernel, iterations=1)

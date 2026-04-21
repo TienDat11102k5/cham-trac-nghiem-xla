@@ -1,5 +1,4 @@
 import os
-
 import cv2
 import numpy as np
 from typing import Optional
@@ -12,27 +11,20 @@ def doc_anh(duong_dan: str) -> np.ndarray:
         raise FileNotFoundError(
             f"Không tìm thấy file ảnh: '{duong_dan}'"
         )
-
     anh = cv2.imread(duong_dan)
-
     if anh is None:
         raise ValueError(
             f"File không phải ảnh hợp lệ hoặc bị hỏng: '{duong_dan}'"
         )
-
     return anh
-
 
 def chuyen_xam(anh: np.ndarray) -> np.ndarray:
     # Tránh crash khi hàm được gọi lại trong quá trình debug pipeline
     if anh.ndim == 2:
         return anh
-
     # OpenCV tối ưu nội bộ bằng SIMD, nhanh hơn tự tính bằng NumPy
     anh_xam = cv2.cvtColor(anh, cv2.COLOR_BGR2GRAY)
-
     return anh_xam
-
 
 def loc_nhieu(anh_xam: np.ndarray,
               loai_loc: str = "gaussian",
@@ -49,14 +41,11 @@ def loc_nhieu(anh_xam: np.ndarray,
             f"loai_loc không hợp lệ: '{loai_loc}'. "
             f"Các giá trị hợp lệ: {cac_bo_loc_hop_le}"
         )
-
     # Phù hợp nhất cho nhiễu Gaussian — loại nhiễu phổ biến nhất trong ảnh scan
     if loai_loc == "gaussian":
         return cv2.GaussianBlur(anh_xam, (kich_thuoc, kich_thuoc), 0)
-
     # Loại bỏ được nhiễu muối tiêu (salt-and-pepper) vì median loại cực trị
     if loai_loc == "median":
         return cv2.medianBlur(anh_xam, kich_thuoc)
-
     # Edge-preserving: pixel có cường độ khác biệt lớn (= cạnh) không bị trộn
     return cv2.bilateralFilter(anh_xam, kich_thuoc, sigmaColor=75, sigmaSpace=75)
