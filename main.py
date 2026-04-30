@@ -19,6 +19,7 @@ from src.reader import (
     phat_hien_anchor, phan_loai_vung_roi,
     extract_exam_code_region, read_exam_code,
     extract_student_id_region, read_student_id,
+    extract_answer_region,
     visualize_all_regions, visualize_anchors,
 )
 from src.grader import grade_from_image
@@ -54,7 +55,18 @@ def luu_anh_trung_gian(anh: any, ten_file: str, thu_muc: str = "output") -> None
     cv2.imwrite(str(duong_dan), anh)
 
 
+def xoa_anh_output(thu_muc: str = "output") -> None:
+    output_path = Path(thu_muc)
+    if output_path.exists():
+        for file in output_path.glob("*.jpg"):
+            file.unlink()
+        for file in output_path.glob("*.png"):
+            file.unlink()
+
+
 def main(image_path: str, answer_key_path: Optional[str] = None, save_images: bool = True) -> None:
+    xoa_anh_output()
+    
     print("=" * 60)
     print("HE THONG CHAM TRAC NGHIEM TU DONG (OMR)")
     print("=" * 60)
@@ -126,14 +138,17 @@ def main(image_path: str, answer_key_path: Optional[str] = None, save_images: bo
                 *rois['ma_de'])
             vung_mssv = extract_student_id_region(anh_nan_chinh,
                 *rois['sbd'])
+            vung_dap_an = extract_answer_region(anh_nan_chinh,
+                *rois['dap_an'])
             
             if save_images:
                 anh_roi = visualize_all_regions(anh_nan_chinh, rois=rois)
                 luu_anh_trung_gian(anh_roi, "06_roi_regions.jpg")
-                luu_anh_trung_gian(vung_ma_de, "06a_ma_de_region.jpg")
-                luu_anh_trung_gian(vung_mssv, "06b_mssv_region.jpg")
                 anh_anchor = visualize_anchors(anh_nan_chinh, anchors)
-                luu_anh_trung_gian(anh_anchor, "06c_anchors.jpg")
+                luu_anh_trung_gian(anh_anchor, "06a_anchors.jpg")
+                luu_anh_trung_gian(vung_ma_de, "06b_ma_de_region.jpg")
+                luu_anh_trung_gian(vung_mssv, "06c_mssv_region.jpg")
+                luu_anh_trung_gian(vung_dap_an, "06d_dap_an_region.jpg")
             
             ma_de = "N/A"
             for method in ["otsu", "adaptive", "binary"]:

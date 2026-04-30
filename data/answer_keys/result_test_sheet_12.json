@@ -1,0 +1,135 @@
+{
+  "image_path": "E:/cham-trac-nghiem-xla/data/raw/test_sheet_12.jpg",
+  "so_bao_danh": "112005",
+  "ma_de": "103",
+  "num_questions": 20,
+  "total": 20,
+  "correct": 3,
+  "wrong": 17,
+  "score": 1.5,
+  "score_display": "1.50/10",
+  "answers": {
+    "1": "A",
+    "2": "B",
+    "3": "B",
+    "4": "C",
+    "5": "C",
+    "6": "B",
+    "7": "C",
+    "8": "D",
+    "9": "D",
+    "10": "C",
+    "11": "A",
+    "12": "D",
+    "13": "D",
+    "14": "D",
+    "15": "C",
+    "16": "C",
+    "17": "B",
+    "18": "C",
+    "19": "D",
+    "20": "A"
+  },
+  "details": {
+    "1": {
+      "student": "A",
+      "correct": "C",
+      "result": "wrong"
+    },
+    "2": {
+      "student": "B",
+      "correct": "A",
+      "result": "wrong"
+    },
+    "3": {
+      "student": "B",
+      "correct": "D",
+      "result": "wrong"
+    },
+    "4": {
+      "student": "C",
+      "correct": "B",
+      "result": "wrong"
+    },
+    "5": {
+      "student": "C",
+      "correct": "C",
+      "result": "correct"
+    },
+    "6": {
+      "student": "B",
+      "correct": "D",
+      "result": "wrong"
+    },
+    "7": {
+      "student": "C",
+      "correct": "A",
+      "result": "wrong"
+    },
+    "8": {
+      "student": "D",
+      "correct": "B",
+      "result": "wrong"
+    },
+    "9": {
+      "student": "D",
+      "correct": "C",
+      "result": "wrong"
+    },
+    "10": {
+      "student": "C",
+      "correct": "D",
+      "result": "wrong"
+    },
+    "11": {
+      "student": "A",
+      "correct": "A",
+      "result": "correct"
+    },
+    "12": {
+      "student": "D",
+      "correct": "B",
+      "result": "wrong"
+    },
+    "13": {
+      "student": "D",
+      "correct": "C",
+      "result": "wrong"
+    },
+    "14": {
+      "student": "D",
+      "correct": "D",
+      "result": "correct"
+    },
+    "15": {
+      "student": "C",
+      "correct": "A",
+      "result": "wrong"
+    },
+    "16": {
+      "student": "C",
+      "correct": "B",
+      "result": "wrong"
+    },
+    "17": {
+      "student": "B",
+      "correct": "C",
+      "result": "wrong"
+    },
+    "18": {
+      "student": "C",
+      "correct": "D",
+      "result": "wrong"
+    },
+    "19": {
+      "student": "D",
+      "correct": "A",
+      "result": "wrong"
+    },
+    "20": {
+      "student": "A",
+      "correct": "B",
+      "result": "wrong"
+    }
+  }
+}
