@@ -13,9 +13,10 @@ def tim_goc_giay(anh_canh: np.ndarray, auto_detect_cropped: bool = True) -> Opti
     h_anh, w_anh = anh_canh.shape
     image_area = h_anh * w_anh
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    anh_dong = cv2.morphologyEx(anh_canh, cv2.MORPH_CLOSE, kernel, iterations=2)
-    anh_dilate = cv2.dilate(anh_dong, kernel, iterations=1)
+    # Morphology để nối các cạnh bị đứt
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    anh_dong = cv2.morphologyEx(anh_canh, cv2.MORPH_CLOSE, kernel, iterations=3)
+    anh_dilate = cv2.dilate(anh_dong, kernel, iterations=2)
     
     contours, _ = cv2.findContours(anh_dilate, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     

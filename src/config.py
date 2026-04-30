@@ -13,8 +13,8 @@ WARPED_IMAGE_HEIGHT = 1200  # Chiều cao ảnh sau nắn chỉnh
 GAUSSIAN_KERNEL_SIZE = 5  # Kích thước kernel Gaussian blur (phải lẻ)
 MEDIAN_KERNEL_SIZE = 5  # Kích thước kernel Median blur (phải lẻ)
 
-CANNY_LOW_THRESHOLD = 50  # Ngưỡng thấp Canny edge detection
-CANNY_HIGH_THRESHOLD = 150  # Ngưỡng cao Canny edge detection
+CANNY_LOW_THRESHOLD = 75  # Ngưỡng thấp Canny edge detection
+CANNY_HIGH_THRESHOLD = 200  # Ngưỡng cao Canny edge detection
 
 ANCHOR_MIN_AREA = 180  # Diện tích tối thiểu anchor (pixel²) — anchor nhỏ nhất ~210px²
 ANCHOR_MAX_AREA = 700  # Diện tích tối đa anchor (pixel²)

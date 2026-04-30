@@ -148,10 +148,10 @@ def phan_loai_vung_roi(anchors: List[Dict],
     if nhom_tren:
         nhom_tren_sorted = sorted(nhom_tren, key=lambda a: a['cx'])
 
-        # Anchor phân cách SBD | Mã đề: nằm quanh 45% chiều rộng
-        mid_x = img_w * 0.45
+        # Anchor phân cách SBD | Mã đề: nằm quanh 48-52% chiều rộng
+        mid_x = img_w * 0.50
         phan_cach = [a for a in nhom_tren_sorted
-                     if abs(a['cx'] - mid_x) < img_w * 0.18]
+                     if abs(a['cx'] - mid_x) < img_w * 0.12]
 
         # Y start: lấy anchor cao nhất (góc trên) + offset nhỏ
         top_row_anchors = [a for a in nhom_tren if a['cy'] < img_h * 0.40]
