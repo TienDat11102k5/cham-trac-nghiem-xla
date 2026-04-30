@@ -408,7 +408,6 @@ def read_exam_code(exam_code_region: np.ndarray,
     # Sắp xếp cột từ trái → phải
     valid_cols = sorted(valid_cols, key=lambda x: x[0])
     digit_cols = [cc for cc, cnt in valid_cols[:num_digits]]
-    print(f"DEBUG: col_counts={col_counts}, valid_cols={valid_cols}, digit_cols={digit_cols}")
 
     # Chỉ giữ đúng số hàng cần thiết (10)
     # Lấy N hàng CUỐI — vì hàng header nằm ở trên cùng
@@ -430,8 +429,6 @@ def read_exam_code(exam_code_region: np.ndarray,
     elif len(row_centers) > choices_per_digit:
         row_centers = row_centers[-choices_per_digit:]
         
-    print(f"DEBUG: row_centers={row_centers}")
-
     if len(row_centers) < choices_per_digit:
         return _read_code_grid_divide(binary, num_digits, choices_per_digit, digit_cols)
 
@@ -473,7 +470,6 @@ def read_exam_code(exam_code_region: np.ndarray,
 
         z_scores = (arr - arr.mean()) / std
         max_idx = int(np.argmax(z_scores))
-        print(f"Digit {digit_idx}: z_scores={z_scores}, counts={counts}")
 
         if z_scores[max_idx] >= ZSCORE_THRESHOLD:
             exam_code += str(max_idx)
