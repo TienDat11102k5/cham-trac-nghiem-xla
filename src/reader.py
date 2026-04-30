@@ -24,24 +24,30 @@ def phat_hien_anchor(warped_image: np.ndarray) -> List[Dict]:
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=2)
 
-    # Tìm tất cả contour
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL,
+    # Tìm tất cả contour (dùng RETR_LIST để tìm cả contour bị bao bọc bên trong)
+    contours, _ = cv2.findContours(binary, cv2.RETR_LIST,
                                    cv2.CHAIN_APPROX_SIMPLE)
 
-    # Lọc anchor theo 3 tiêu chí: area + extent + solidity
+    # Lọc anchor theo 4 tiêu chí: area + extent + solidity + aspect_ratio
     anchors = []
     for cnt in contours:
         area = cv2.contourArea(cnt)
 
-        # Lọc diện tích: anchor có kích thước cố định, bubble nhỏ hơn
+        # Lọc diện tích: anchor ~ 180-700 px², bubble nhỏ hơn (~180-250 px²)
         if area < ANCHOR_MIN_AREA or area > ANCHOR_MAX_AREA:
             continue
 
         x, y, w, h = cv2.boundingRect(cnt)
         rect_area = w * h
 
+        # Aspect ratio: anchor phải gần vuông (w/h ≤ 1.5)
+        # Loại bỏ chữ, đường kẻ dài-hẹp bị nhầm là anchor
+        aspect = max(w, h) / min(w, h) if min(w, h) > 0 else 999
+        if aspect > 1.5:
+            continue
+
         # Extent = area / bounding_rect: phân biệt hình vuông vs tròn
-        # Anchor vuông: extent > 0.82 | Bubble tròn: extent < 0.76
+        # Anchor vuông: extent > 0.72 | Bubble tròn: extent < 0.70
         extent = area / rect_area if rect_area > 0 else 0
         if extent < ANCHOR_MIN_EXTENT:
             continue
@@ -84,98 +90,145 @@ def phat_hien_anchor(warped_image: np.ndarray) -> List[Dict]:
 def phan_loai_vung_roi(anchors: List[Dict],
                        img_h: int = 1200,
                        img_w: int = 800) -> Dict[str, Tuple[int, int, int, int]]:
-    # Chia anchor thành 2 nhóm: trên (SBD + Mã đề) và dưới (Đáp án)
-    y_threshold = img_h * 0.60
-    nhom_tren = [a for a in anchors if a['cy'] < y_threshold]
-    nhom_duoi = [a for a in anchors if a['cy'] >= y_threshold]
+    """
+    Phân loại anchor thành các vùng ROI dựa trên vị trí thực tế trên phiếu.
+
+    Cấu trúc phiếu (từ trên xuống dưới):
+      - Hàng anchor trên:        2 anchor góc trên (cy ~ 8-15% h)
+      - Hàng anchor giữa-trái:   1-2 anchor giữa trái/phải (cy ~ 35-45% h)
+      - Hàng anchor phân cách:   3-5 anchor ngang (cy ~ 55-68% h) — ranh giới SBD|Đáp án
+      - Hàng anchor dưới:        2-3 anchor góc dưới (cy ~ 85-95% h)
+
+    Strategy: cluster anchor theo trục y → tìm hàng gần 60% h nhất làm
+    ranh giới SBD/MĐề vs Đáp án.
+    """
+    # ── Bước 1: Cluster anchor theo trục y (tìm các "hàng anchor") ──
+    sorted_by_y = sorted(anchors, key=lambda a: a['cy'])
+
+    # Khoảng cách tối thiểu giữa 2 hàng = 5% chiều cao ảnh
+    row_gap = img_h * 0.05
+    rows: List[List[Dict]] = []
+    current_row = [sorted_by_y[0]]
+    for a in sorted_by_y[1:]:
+        if a['cy'] - current_row[-1]['cy'] < row_gap:
+            current_row.append(a)
+        else:
+            rows.append(current_row)
+            current_row = [a]
+    rows.append(current_row)
+
+    # ── Bước 2: Tìm hàng anchor phân cách SBD/MĐề ↔ Đáp án ──
+    # Hàng phân cách nằm trong vùng 50~70% chiều cao
+    sep_zone_min = img_h * 0.50
+    sep_zone_max = img_h * 0.72
+
+    sep_row = None
+    for row in rows:
+        row_y = float(np.mean([a['cy'] for a in row]))
+        if sep_zone_min <= row_y <= sep_zone_max:
+            # Ưu tiên hàng có nhiều anchor nhất
+            if sep_row is None or len(row) > len(sep_row):
+                sep_row = row
+
+    # Fallback: lấy hàng gần 62% nhất
+    if sep_row is None:
+        target_y = img_h * 0.62
+        sep_row = min(rows, key=lambda r: abs(float(np.mean([a['cy'] for a in r])) - target_y))
+
+    sep_y = float(np.mean([a['cy'] for a in sep_row]))
+
+    # ── Bước 3: Phân anchor thành nhóm trên và nhóm dưới ──
+    nhom_tren = [a for a in anchors if a['cy'] < sep_y - 5]
+    nhom_duoi = [a for a in anchors if a['cy'] >= sep_y - 5]
 
     roi_sbd = None
     roi_ma_de = None
 
-    # Tính ROI cho SBD và Mã Đề từ nhóm trên
+    # ── Bước 4: Tính ROI SBD và Mã Đề từ nhóm trên ──
     if nhom_tren:
         nhom_tren_sorted = sorted(nhom_tren, key=lambda a: a['cx'])
 
-        # Tìm anchor phân cách (nằm ở giữa, x ≈ 45% chiều rộng)
-        # Anchor này là ranh giới giữa SBD (trái) và Mã đề (phải)
+        # Anchor phân cách SBD | Mã đề: nằm quanh 45% chiều rộng
         mid_x = img_w * 0.45
         phan_cach = [a for a in nhom_tren_sorted
-                     if abs(a['cx'] - mid_x) < img_w * 0.15]
+                     if abs(a['cx'] - mid_x) < img_w * 0.18]
+
+        # Y start: lấy anchor cao nhất (góc trên) + offset nhỏ
+        top_row_anchors = [a for a in nhom_tren if a['cy'] < img_h * 0.40]
+        if top_row_anchors:
+            y_start = int(max(a['cy'] + a['h'] for a in top_row_anchors))
+        else:
+            y_start = int(img_h * 0.30)
+
+        # Y end: ngay phía trên hàng anchor phân cách
+        anchor_h_avg = float(np.mean([a['h'] for a in sep_row]))
+        y_end = int(sep_y - anchor_h_avg * 0.5)
+        y_end = min(y_end, img_h - 1)
 
         if phan_cach:
             sep = phan_cach[0]
 
-            # Y START: Ngang hàng header "SỐ BÁO DANH" / "MÃ ĐỀ"
-            # Header nằm phía trên anchor phân cách khoảng 3.5 lần chiều cao anchor
-            y_start = int(sep['cy'] - sep['h'] * 3.5)
-            y_start = max(0, y_start)
-
-            # Y END: Lấy từ anchor hàng trên nhóm dưới (ranh giới với đáp án)
-            if nhom_duoi:
-                nhom_duoi_sorted_y = sorted(nhom_duoi, key=lambda a: a['cy'])
-                y_end = int(nhom_duoi_sorted_y[0]['cy'] - nhom_duoi_sorted_y[0]['h'])
-            else:
-                y_end = int(img_h * 0.65)
-
-            # SBD: từ cạnh trái ảnh đến anchor phân cách
+            # SBD: luôn lấy từ 10% chiều rộng để bao trọn tất cả các cột SBD
             x_start_sbd = int(img_w * 0.10)
-            x_end_sbd = int(sep['cx'] - sep['w'] * 0.3)
-
+            x_end_sbd = int(sep['cx'] - sep['w'] * 0.5)
             roi_sbd = (x_start_sbd, y_start,
-                       x_end_sbd - x_start_sbd, y_end - y_start)
+                       max(1, x_end_sbd - x_start_sbd), max(1, y_end - y_start))
 
             # Mã đề: từ anchor phân cách đến bên phải
-            x_start_md = int(sep['cx'] - sep['w'] * 0.3)
-            x_end_md = int(img_w * 0.72)
-
+            # Giữ đủ rộng (75%) cho cả phiếu có/không có text 'FILLING ID...'
+            # Lọc cột text dọc được xử lý trong read_exam_code bằng z-score
+            x_start_md = int(sep['cx'] + sep['w'] * 0.5)
+            x_end_md = int(img_w * 0.75)
+            # Đảm bảo đủ rộng tối thiểu 18% để chứa 3 cột bubble
+            x_end_md = max(x_end_md, x_start_md + int(img_w * 0.18))
+            x_end_md = min(x_end_md, img_w - 1)
             roi_ma_de = (x_start_md, y_start,
-                         x_end_md - x_start_md, y_end - y_start)
+                         max(1, x_end_md - x_start_md), max(1, y_end - y_start))
+        else:
+            # Không tìm được anchor phân cách → chia đôi theo chiều rộng
+            x_mid = img_w // 2
+            roi_sbd = (int(img_w * 0.10), y_start,
+                       max(1, int(x_mid * 0.9) - int(img_w * 0.10)), max(1, y_end - y_start))
+            roi_ma_de = (x_mid, y_start,
+                         max(1, int(img_w * 0.75) - x_mid), max(1, y_end - y_start))
 
-    # Tính vùng đáp án từ nhóm dưới
-    # Vùng đáp án bao từ câu 1 đến câu 20 (cả 2 cột)
+    # ── Bước 5: Tính ROI Đáp án từ nhóm dưới ──
     roi_dap_an = None
 
-    if len(nhom_duoi) >= 2:
-        nhom_duoi_by_y = sorted(nhom_duoi, key=lambda a: a['cy'])
+    if nhom_duoi:
+        anchor_h_avg = float(np.mean([a['h'] for a in sep_row]))
 
-        # Chia anchor thành hàng trên (ranh giới trên) và hàng dưới (ranh giới dưới)
-        y_mid_duoi = (nhom_duoi_by_y[0]['cy'] + nhom_duoi_by_y[-1]['cy']) / 2
-        hang_tren_da = [a for a in nhom_duoi_by_y if a['cy'] < y_mid_duoi]
-        hang_duoi_da = [a for a in nhom_duoi_by_y if a['cy'] >= y_mid_duoi]
+        # Y top: ngay dưới hàng anchor phân cách (offset nhỏ để không cắt hàng đầu)
+        y_top = int(sep_y + anchor_h_avg * 1.0)
 
-        if hang_tren_da and hang_duoi_da:
-            # Kiểm tra xem hàng trên và hàng dưới có thực sự khác hàng không?
-            # Nếu ảnh bị cắt mất phần dưới (như test_sheet_03), 
-            # 2 anchor cùng hàng trên sẽ bị ép chia vào hang_tren_da và hang_duoi_da.
-            y_diff = hang_duoi_da[-1]['cy'] - hang_tren_da[0]['cy']
-            
-            # X: lấy anchor xa nhất trái/phải → mở rộng thêm để bao toàn bộ đáp án
-            all_x = [a['cx'] for a in nhom_duoi]
-            x_min = int(min(all_x) - 15)
-            x_max = int(max(all_x) + 15)
-
-            # Y top: Ngay dưới hàng anchor trên (+ offset cho header "A B C D")
-            anchor_h_avg = np.mean([a['h'] for a in hang_tren_da])
-            y_top = int(hang_tren_da[0]['cy'] + anchor_h_avg * 1.6)
-
-            if y_diff >= anchor_h_avg * 3:
-                # Ảnh bình thường: có cả hàng trên và hàng dưới
-                y_bot = int(hang_duoi_da[-1]['cy'] + hang_duoi_da[-1]['h'])
-            else:
-                # Ảnh bị crop mất hàng dưới: quét tới gần cuối ảnh
-                y_bot = int(img_h * 0.98)
-
-            roi_dap_an = (x_min, y_top, x_max - x_min, y_bot - y_top)
+        # Tìm hàng anchor dưới cùng (cy > 80% h) để làm ranh giới dưới
+        bottom_anchors = [a for a in nhom_duoi if a['cy'] > img_h * 0.80]
+        if bottom_anchors:
+            y_bot = int(max(a['cy'] - a['h'] * 0.5 for a in bottom_anchors))
         else:
-            all_x = [a['cx'] for a in nhom_duoi]
-            all_y = [a['cy'] for a in nhom_duoi]
-            x_min = int(min(all_x) - 15)
-            x_max = int(max(all_x) + 15)
-            y_min = int(min(all_y))
-            y_max = int(img_h * 0.98) # Mở rộng xuống cuối nếu chỉ có 1 hàng
-            roi_dap_an = (x_min, y_min, x_max - x_min, y_max - y_min)
+            y_bot = int(img_h * 0.98)
 
-    # Fallback: dùng tọa độ cứng nếu auto-detect thất bại
+        # X: dùng x min/max từ TẤT CẢ anchor của nhóm dưới (bao gồm sep_row)
+        # để đảm bảo bao trọn toàn bộ 2 cột đáp án (câu 1-10 và câu 11-20)
+        all_x_below = [a['cx'] for a in nhom_duoi]
+        all_x_sep = [a['cx'] for a in sep_row]
+        all_x_combined = all_x_below + all_x_sep
+        if len(all_x_combined) >= 2:
+            x_min = int(min(all_x_combined) - 30)
+            x_max = int(max(all_x_combined) + 30)
+        else:
+            x_min = int(min(all_x_combined) - 30)
+            x_max = int(max(all_x_combined) + 30)
+
+        # Clip vào giới hạn ảnh
+        x_min = max(0, x_min)
+        x_max = min(img_w, x_max)
+        y_top = max(0, y_top)
+        y_bot = min(img_h, y_bot)
+
+        roi_dap_an = (x_min, y_top, max(1, x_max - x_min), max(1, y_bot - y_top))
+
+    # ── Fallback: dùng tọa độ cứng nếu auto-detect thất bại ──
     from src.config import (
         EXAM_CODE_ROI_X, EXAM_CODE_ROI_Y, EXAM_CODE_ROI_WIDTH, EXAM_CODE_ROI_HEIGHT,
         STUDENT_ID_ROI_X, STUDENT_ID_ROI_Y, STUDENT_ID_ROI_WIDTH, STUDENT_ID_ROI_HEIGHT,
@@ -279,9 +332,9 @@ def read_exam_code(exam_code_region: np.ndarray,
     # HoughCircles phát hiện bubble
     circles = cv2.HoughCircles(
         blur, cv2.HOUGH_GRADIENT,
-        dp=1.2, minDist=15,
-        param1=50, param2=25,
-        minRadius=8, maxRadius=16
+        dp=1.2, minDist=12,
+        param1=50, param2=20,
+        minRadius=6, maxRadius=16
     )
 
     if circles is None or len(circles[0]) < num_digits * choices_per_digit * 0.5:
@@ -291,17 +344,57 @@ def read_exam_code(exam_code_region: np.ndarray,
     circles = np.round(circles[0]).astype(int)
 
     # Phân cụm x → cột (mỗi cột = 1 chữ số)
+    # Dùng thuật toán Peak Finding (Histogram) thay vì gộp tuần tự để tránh bị ảnh hưởng bởi nhiễu (outliers)
     all_cx = sorted([int(c[0]) for c in circles])
-    col_centers = _cluster_1d_simple(all_cx, min_gap=15)
+    
+    # 1. Tạo histogram với bin_size = 5px
+    max_x = max(all_cx) if all_cx else 0
+    hist, bins = np.histogram(all_cx, bins=np.arange(0, max_x + 10, 5))
+    
+    # 2. Tìm các đỉnh (peaks) cục bộ
+    peaks = []
+    for i in range(1, len(hist)-1):
+        # Đỉnh phải cao hơn xung quanh và có ít nhất 2 vòng tròn
+        if hist[i] > hist[i-1] and hist[i] >= hist[i+1] and hist[i] > 1:
+            peaks.append(bins[i] + 2.5)
+            
+    # 3. Gộp các đỉnh quá gần nhau (do 1 bong bóng bị tách đôi bởi số in bên trong)
+    # Khoảng cách giữa 2 cột gần nhất (phiếu 04) là ~22px.
+    # Khoảng cách giữa 2 nửa bong bóng (phiếu 01-03) là ~12-15px.
+    # Dùng ngưỡng 16px để tách biệt hoàn hảo 2 trường hợp.
+    col_centers = []
+    for p in peaks:
+        if not col_centers or p - col_centers[-1] >= 16:
+            col_centers.append(p)
+        else:
+            col_centers[-1] = (col_centers[-1] + p) / 2
+            
+    col_centers = [int(c) for c in col_centers]
 
     # Phân cụm y → hàng (0-9)
     all_cy = sorted([int(c[1]) for c in circles])
-    row_centers = _cluster_1d_simple(all_cy, min_gap=15)
+    
+    max_y = max(all_cy) if all_cy else 0
+    hist_y, bins_y = np.histogram(all_cy, bins=np.arange(0, max_y + 10, 5))
+    
+    peaks_y = []
+    for i in range(1, len(hist_y)-1):
+        if hist_y[i] > hist_y[i-1] and hist_y[i] >= hist_y[i+1] and hist_y[i] > 0:
+            peaks_y.append(bins_y[i] + 2.5)
+            
+    row_centers = []
+    for p in peaks_y:
+        if not row_centers or p - row_centers[-1] >= 16:
+            row_centers.append(p)
+        else:
+            row_centers[-1] = (row_centers[-1] + p) / 2
+            
+    row_centers = [int(r) for r in row_centers]
 
     # Lọc: chỉ giữ cột có đủ bubble (≥ 50% số hàng)
     col_counts = []
     for cc in col_centers:
-        count = sum(1 for c in circles if abs(int(c[0]) - cc) < 15)
+        count = sum(1 for c in circles if abs(int(c[0]) - cc) < 14)
         col_counts.append((cc, count))
 
     min_bubbles = max(3, int(len(row_centers) * 0.5))
@@ -315,35 +408,44 @@ def read_exam_code(exam_code_region: np.ndarray,
     # Sắp xếp cột từ trái → phải
     valid_cols = sorted(valid_cols, key=lambda x: x[0])
     digit_cols = [cc for cc, cnt in valid_cols[:num_digits]]
+    print(f"DEBUG: col_counts={col_counts}, valid_cols={valid_cols}, digit_cols={digit_cols}")
 
     # Chỉ giữ đúng số hàng cần thiết (10)
     # Lấy N hàng CUỐI — vì hàng header nằm ở trên cùng
-    if len(row_centers) > choices_per_digit:
-        row_centers = row_centers[-choices_per_digit:]
-
-    if len(row_centers) < choices_per_digit:
-        return _read_code_grid_divide(binary, num_digits, choices_per_digit)
-
-    # Validate: khoảng cách giữa các hàng phải tương đối đều
-    # Nếu hàng đầu quá xa → có thể vẫn là header
-    if len(row_centers) >= 3:
+    # Validate: chọn ra đúng `choices_per_digit` hàng có khoảng cách đều nhau nhất
+    if len(row_centers) > choices_per_digit and len(row_centers) >= 3:
         gaps = [row_centers[i+1] - row_centers[i] for i in range(len(row_centers)-1)]
         median_gap = sorted(gaps)[len(gaps)//2]
-        # Loại bỏ hàng đầu nếu gap đầu > 1.8x median (header lạc)
-        while len(row_centers) > choices_per_digit:
-            first_gap = row_centers[1] - row_centers[0]
-            if first_gap > median_gap * 1.8:
-                row_centers = row_centers[1:]
-            else:
-                break
-        # Nếu vẫn dư → cắt đầu
-        if len(row_centers) > choices_per_digit:
-            row_centers = row_centers[-choices_per_digit:]
+        
+        best_start = 0
+        min_err = float('inf')
+        for i in range(len(row_centers) - choices_per_digit + 1):
+            err = 0
+            for j in range(choices_per_digit - 1):
+                err += abs((row_centers[i+j+1] - row_centers[i+j]) - median_gap)
+            if err < min_err:
+                min_err = err
+                best_start = i
+        row_centers = row_centers[best_start : best_start + choices_per_digit]
+    elif len(row_centers) > choices_per_digit:
+        row_centers = row_centers[-choices_per_digit:]
+        
+    print(f"DEBUG: row_centers={row_centers}")
+
+    if len(row_centers) < choices_per_digit:
+        return _read_code_grid_divide(binary, num_digits, choices_per_digit, digit_cols)
+
+    # Khử nhiễu nét chữ in (số bên trong bubble) bằng erosion mạnh hơn trên toàn bộ ảnh
+    # Việc thực hiện trước vòng lặp giúp tránh lỗi viền (border effects) khi cắt nhỏ ảnh
+    kernel_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    binary_eroded = cv2.erode(binary, kernel_erode, iterations=1)
 
     # Đọc từng chữ số bằng z-score
     avg_r = int(np.mean([int(c[2]) for c in circles]))
-    bw = avg_r * 2 + 4  # Kích thước vùng đọc
-    bh = avg_r * 2 + 4
+    # Dùng bounding box nhỏ hơn một chút so với bong bóng để tập trung đếm pixel lõi,
+    # tránh lấn sang phần text hướng dẫn bên cạnh (gây nhiễu cho cột cuối).
+    bw = int(avg_r * 1.6)
+    bh = int(avg_r * 1.6)
 
     exam_code = ""
     img_h, img_w = binary.shape[:2]
@@ -356,7 +458,7 @@ def read_exam_code(exam_code_region: np.ndarray,
             y1 = max(0, int(row_y - bh // 2))
             x2 = min(img_w, x1 + bw)
             y2 = min(img_h, y1 + bh)
-            region = binary[y1:y2, x1:x2]
+            region = binary_eroded[y1:y2, x1:x2]
             counts.append(int(cv2.countNonZero(region)))
 
         # Z-score: tìm chữ số nổi bật nhất (pixel tô nhiều nhất)
@@ -371,6 +473,7 @@ def read_exam_code(exam_code_region: np.ndarray,
 
         z_scores = (arr - arr.mean()) / std
         max_idx = int(np.argmax(z_scores))
+        print(f"Digit {digit_idx}: z_scores={z_scores}, counts={counts}")
 
         if z_scores[max_idx] >= ZSCORE_THRESHOLD:
             exam_code += str(max_idx)
@@ -389,7 +492,8 @@ def read_exam_code(exam_code_region: np.ndarray,
 
 def _read_code_grid_divide(binary: np.ndarray,
                            num_digits: int,
-                           choices_per_digit: int) -> str:
+                           choices_per_digit: int,
+                           digit_cols: list = None) -> str:
     """Fallback: chia đều ROI thành grid để đọc (phương pháp cũ)."""
     bubble_height = binary.shape[0] // choices_per_digit
     bubble_width = binary.shape[1] // num_digits
@@ -400,15 +504,26 @@ def _read_code_grid_divide(binary: np.ndarray,
             f"digits: {num_digits}, choices: {choices_per_digit}"
         )
 
+    # Khử nhiễu nét chữ in bằng erosion trên toàn bộ ảnh
+    kernel_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    binary_eroded = cv2.erode(binary, kernel_erode, iterations=1)
+
     exam_code = ""
     for digit_idx in range(num_digits):
         counts = []
         for choice_idx in range(choices_per_digit):
             y1 = choice_idx * bubble_height
             y2 = (choice_idx + 1) * bubble_height
-            x1 = digit_idx * bubble_width
-            x2 = (digit_idx + 1) * bubble_width
-            bubble = binary[y1:y2, x1:x2]
+            if digit_cols and len(digit_cols) == num_digits:
+                col_x = digit_cols[digit_idx]
+                bw = min(bubble_height, 24)  # Giới hạn chiều rộng bubble
+                x1 = max(0, col_x - bw // 2)
+                x2 = min(binary.shape[1], col_x + bw // 2)
+            else:
+                x1 = digit_idx * bubble_width
+                x2 = (digit_idx + 1) * bubble_width
+                
+            bubble = binary_eroded[y1:y2, x1:x2]
             counts.append(int(cv2.countNonZero(bubble)))
 
         arr = np.array(counts, dtype=float)
@@ -465,7 +580,7 @@ def _phan_nguong(gray: np.ndarray, method: str) -> np.ndarray:
             gray, 255,
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY_INV,
-            11, 2
+            51, 2  # Tăng blockSize lên 51 để bong bóng đen không bị làm rỗng
         )
     elif method == "otsu":
         _, binary = cv2.threshold(gray, 0, 255,

@@ -17,7 +17,7 @@ def tim_goc_giay(anh_canh: np.ndarray, auto_detect_cropped: bool = True) -> Opti
     anh_dong = cv2.morphologyEx(anh_canh, cv2.MORPH_CLOSE, kernel, iterations=2)
     anh_dilate = cv2.dilate(anh_dong, kernel, iterations=1)
     
-    contours, _ = cv2.findContours(anh_dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(anh_dilate, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     
     if not contours:
         if auto_detect_cropped:
@@ -38,21 +38,16 @@ def tim_goc_giay(anh_canh: np.ndarray, auto_detect_cropped: bool = True) -> Opti
     area_ratio = largest_area / image_area
     
     # Nếu contour lớn nhất chiếm < 30% diện tích -> không phải tờ giấy chính
-    if area_ratio < 0.30:
-        if auto_detect_cropped:
-            return None
-        raise ValueError(
-            "Không tìm thấy tờ giấy thi trong ảnh. "
-            "Contour lớn nhất chỉ chiếm {:.1f}% diện tích ảnh.".format(area_ratio * 100)
-        )
+    # Lưu ý: Do dùng RETR_LIST, contour đầu tiên có thể là toàn bộ ảnh (> 95%), ta sẽ xét trong vòng lặp.
     
     # Thử tìm 4 góc từ contour lớn nhất
     for contour in contours[:3]:
         area = cv2.contourArea(contour)
         area_ratio = area / image_area
         
-        # Chỉ xét contour chiếm >= 30% diện tích
-        if area_ratio < 0.30:
+        # Chỉ xét contour chiếm >= 30% và <= 95% diện tích ảnh
+        # (Loại bỏ contour bao trọn toàn bộ ảnh do nhiễu lề)
+        if area_ratio < 0.30 or area_ratio > 0.95:
             continue
         
         perimeter = cv2.arcLength(contour, closed=True)
@@ -83,9 +78,6 @@ def tim_goc_giay(anh_canh: np.ndarray, auto_detect_cropped: bool = True) -> Opti
                         min_height = h_anh * 0.5
                         
                         if avg_w >= min_width and avg_h >= min_height:
-                            # Kiểm tra góc có gần viền không (ảnh đã cắt sẵn)
-                            if auto_detect_cropped and _kiem_tra_anh_da_cat_san(corners, w_anh, h_anh):
-                                return None
                             return corners
         
         # Thử với convex hull
@@ -115,8 +107,6 @@ def tim_goc_giay(anh_canh: np.ndarray, auto_detect_cropped: bool = True) -> Opti
                         min_height = h_anh * 0.5
                         
                         if avg_w >= min_width and avg_h >= min_height:
-                            if auto_detect_cropped and _kiem_tra_anh_da_cat_san(corners, w_anh, h_anh):
-                                return None
                             return corners
     
     # Không tìm thấy contour phù hợp -> ảnh đã cắt sẵn

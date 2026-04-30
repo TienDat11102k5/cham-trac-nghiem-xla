@@ -1,4 +1,10 @@
 import sys
+import io
+
+# Fix Unicode encoding trên Windows terminal
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
 import json
 import cv2
 import numpy as np

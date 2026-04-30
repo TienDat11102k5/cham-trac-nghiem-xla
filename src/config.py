@@ -16,9 +16,9 @@ MEDIAN_KERNEL_SIZE = 5  # Kích thước kernel Median blur (phải lẻ)
 CANNY_LOW_THRESHOLD = 50  # Ngưỡng thấp Canny edge detection
 CANNY_HIGH_THRESHOLD = 150  # Ngưỡng cao Canny edge detection
 
-ANCHOR_MIN_AREA = 250  # Diện tích tối thiểu anchor (pixel²)
-ANCHOR_MAX_AREA = 600  # Diện tích tối đa anchor (pixel²)
-ANCHOR_MIN_EXTENT = 0.82  # Tỉ lệ area/bounding_rect tối thiểu (phân biệt vuông vs tròn)
+ANCHOR_MIN_AREA = 180  # Diện tích tối thiểu anchor (pixel²) — anchor nhỏ nhất ~210px²
+ANCHOR_MAX_AREA = 700  # Diện tích tối đa anchor (pixel²)
+ANCHOR_MIN_EXTENT = 0.82  # Tỉ lệ area/bounding_rect tối thiểu (anchor vuông ~0.87, bubble tròn ~0.72)
 ANCHOR_MIN_SOLIDITY = 0.93  # Tỉ lệ area/convex_hull tối thiểu (phân biệt lồi vs lõm)
 
 ZSCORE_THRESHOLD = 1.4  # Z-score tối thiểu để xác nhận bubble được tô

@@ -135,12 +135,12 @@ def phat_hien_luoi_bubble(binary: np.ndarray,
     blur = cv2.GaussianBlur(src, (5, 5), 0)
     circles = cv2.HoughCircles(
         blur, cv2.HOUGH_GRADIENT,
-        dp=1.2,         # Tỉ lệ accumulator
-        minDist=20,      # Khoảng cách tối thiểu giữa 2 tâm
-        param1=50,       # Ngưỡng Canny cao
-        param2=25,       # Ngưỡng accumulator (nhạy)
-        minRadius=10,    # Bán kính tối thiểu bubble
-        maxRadius=18     # Bán kính tối đa bubble
+        dp=1.2,          # Tỉ lệ accumulator
+        minDist=15,       # Khoảng cách tối thiểu giữa 2 tâm
+        param1=50,        # Ngưỡng Canny cao
+        param2=20,        # Ngưỡng accumulator (nhạy hơn)
+        minRadius=6,      # Bán kính tối thiểu bubble (giảm xuống để bắt bubble nhỏ)
+        maxRadius=16      # Bán kính tối đa bubble
     )
 
     if circles is None:
@@ -164,7 +164,7 @@ def phat_hien_luoi_bubble(binary: np.ndarray,
 
     # ── Bước 3: Phân cụm y → hàng ──
     all_cy = sorted([b['cy'] for b in bubbles])
-    row_centers = _cluster_1d(all_cy, min_gap=15)
+    row_centers = _cluster_1d(all_cy, min_gap=10)
 
     if len(row_centers) > rows_per_col:
         row_centers = row_centers[:rows_per_col]
@@ -173,12 +173,12 @@ def phat_hien_luoi_bubble(binary: np.ndarray,
 
     # ── Bước 4: Phân cụm x → cột, lọc cột phụ ──
     all_cx = sorted([b['cx'] for b in bubbles])
-    col_centers = _cluster_1d(all_cx, min_gap=15)
+    col_centers = _cluster_1d(all_cx, min_gap=10)
 
     # Đếm bubble mỗi cột → loại cột có quá ít (anchor hoặc noise)
     col_counts = []
     for cc in col_centers:
-        count = sum(1 for b in bubbles if abs(b['cx'] - cc) < 15)
+        count = sum(1 for b in bubbles if abs(b['cx'] - cc) < 10)
         col_counts.append((cc, count))
 
     # Chỉ giữ cột có >= 50% số hàng
