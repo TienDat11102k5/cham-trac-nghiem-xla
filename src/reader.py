@@ -24,16 +24,16 @@ def phat_hien_anchor(warped_image: np.ndarray) -> List[Dict]:
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=2)
 
-    # Tìm tất cả contour (dùng RETR_LIST để tìm cả contour bị bao bọc bên trong)
-    contours, _ = cv2.findContours(binary, cv2.RETR_LIST,
-                                   cv2.CHAIN_APPROX_SIMPLE)
+    # Tìm tất cả contour (dùng RETR_TREE để có thông tin hierarchy)
+    contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE,
+                                          cv2.CHAIN_APPROX_SIMPLE)
 
     # Lọc anchor theo 4 tiêu chí: area + extent + solidity + aspect_ratio
     anchors = []
-    for cnt in contours:
+    for idx, cnt in enumerate(contours):
         area = cv2.contourArea(cnt)
 
-        # Lọc diện tích: anchor ~ 180-700 px², bubble nhỏ hơn (~180-250 px²)
+        # Lọc diện tích: anchor ~ 180-700 px²
         if area < ANCHOR_MIN_AREA or area > ANCHOR_MAX_AREA:
             continue
 
@@ -41,23 +41,26 @@ def phat_hien_anchor(warped_image: np.ndarray) -> List[Dict]:
         rect_area = w * h
 
         # Aspect ratio: anchor phải gần vuông (w/h ≤ 1.5)
-        # Loại bỏ chữ, đường kẻ dài-hẹp bị nhầm là anchor
         aspect = max(w, h) / min(w, h) if min(w, h) > 0 else 999
         if aspect > 1.5:
             continue
 
-        # Extent = area / bounding_rect: phân biệt hình vuông vs tròn
-        # Anchor vuông: extent > 0.72 | Bubble tròn: extent < 0.70
+        # Extent = area / bounding_rect
         extent = area / rect_area if rect_area > 0 else 0
         if extent < ANCHOR_MIN_EXTENT:
             continue
 
-        # Solidity = area / convex_hull: phân biệt hình lồi vs lõm
-        # Anchor đặc: solidity > 0.93 | Bubble có lỗ: solidity < 0.9
+        # Solidity = area / convex_hull
         hull = cv2.convexHull(cnt)
         hull_area = cv2.contourArea(hull)
         solidity = area / hull_area if hull_area > 0 else 0
         if solidity < ANCHOR_MIN_SOLIDITY:
+            continue
+
+        # Loại bỏ khung số (có contour con bên trong)
+        # hierarchy[0][idx] = [Next, Previous, First_Child, Parent]
+        if hierarchy is not None and hierarchy[0][idx][2] != -1:
+            # Có contour con → đây là khung chứa số, không phải anchor đặc
             continue
 
         # Tính tâm chính xác bằng moments (sub-pixel) thay vì trung bình
@@ -174,12 +177,18 @@ def phan_loai_vung_roi(anchors: List[Dict],
             roi_sbd = (x_start_sbd, y_start,
                        max(1, x_end_sbd - x_start_sbd), max(1, y_end - y_start))
 
-            # Mã đề: từ anchor phân cách đến bên phải
-            # Giữ đủ rộng (75%) cho cả phiếu có/không có text 'FILLING ID...'
-            # Lọc cột text dọc được xử lý trong read_exam_code bằng z-score
+            # Mã đề: từ anchor phân cách, tự động tính chiều rộng cho 3 cột
             x_start_md = int(sep['cx'] + sep['w'] * 0.5)
-            x_end_md = int(img_w * 0.75)
-            # Đảm bảo đủ rộng tối thiểu 18% để chứa 3 cột bubble
+            
+            # Chiều rộng cần thiết = 3 cột × (chiều cao / 10 hàng) × 1.2 (margin)
+            # Giả sử mỗi bubble có kích thước tương đương nhau theo cả 2 chiều
+            col_width_estimate = int((y_end - y_start) / 10 * 1.2)
+            x_end_md = int(x_start_md + col_width_estimate * 3)
+            
+            # Giới hạn tối đa 60% width để tránh lấn sang vùng khác
+            x_end_md = min(x_end_md, int(img_w * 0.60))
+            
+            # Đảm bảo đủ rộng tối thiểu 15% để chứa 3 cột bubble
             x_end_md = max(x_end_md, x_start_md + int(img_w * 0.18))
             x_end_md = min(x_end_md, img_w - 1)
             roi_ma_de = (x_start_md, y_start,
