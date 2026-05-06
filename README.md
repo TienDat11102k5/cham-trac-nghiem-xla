@@ -150,7 +150,7 @@ Tạo file `data/answer_key.json`:
 - [X] Viết test cases với mock data
 - [X] Tích hợp module grader.py với pipeline
 
-### Thành viên 5: Nguyễn An Khả - Chuyên viên Dữ liệu & Kiểm thử QA
+### Thành viên 5: Nguyễn An Kha - Chuyên viên Dữ liệu & Kiểm thử QA
 
 - [ ] Thu thập Đợt 2 (Tập Test bí mật có ảnh khó)
 - [ ] Xây dựng kịch bản kiểm thử (Test cases)
@@ -158,7 +158,7 @@ Tạo file `data/answer_key.json`:
 - [ ] Tổng hợp số liệu đo kiểm thử, đánh giá Accuracy
 - [ ] Tạo nhãn Ground Truth cho tập dữ liệu
 
-### Thành viên 6: Nguyễn Gia Quý - Tools Debug và Chuyên viên viết báo cáo
+### Thành viên 6: Nguyễn Gia Quy - Tools Debug và Chuyên viên viết báo cáo
 
 - [X] Phát triển module tools debug pipeline, batch processing, phân tích anchor
 - [X] Xây dựng Jupyter Notebook demo: `notebooks/pipeline_demo.ipynb`
@@ -180,8 +180,8 @@ Tạo file `data/answer_key.json`:
 | 2 | **Phạm Võ Thành Đạt** | Lập trình viên Cốt lõi 1 (Preprocessing) | Module preprocessing.py, hỗ trợ TV1 |
 | 3 | **Lưu Nhất Huy** | Lập trình viên Cốt lõi 2 (Transform) | Module transform.py, perspective transform |
 | 4 | **Nguyễn Thị Thu Vân** | Lập trình viên Cốt lõi 3 (Grader) | Module grader.py, chấm điểm |
-| 5 | **Nguyễn An Khả** | Chuyên viên Dữ liệu & QA | Kiểm thử, tạo Ground Truth, đánh giá Accuracy |
-| 6 | **Nguyễn Gia Quý** | Tools Debug & Báo cáo | Module tools/, Jupyter Notebook, tài liệu kỹ thuật, báo cáo khoa học |
+| 5 | **Nguyễn An Kha** | Chuyên viên Dữ liệu & QA | Kiểm thử, tạo Ground Truth, đánh giá Accuracy |
+| 6 | **Nguyễn Gia Quy** | Tools Debug & Báo cáo | Module tools/, Jupyter Notebook, tài liệu kỹ thuật, báo cáo khoa học |
 
 ## Tài liệu tham khảo
 
