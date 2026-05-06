@@ -466,9 +466,10 @@ class TestWithRealImage:
         if not self.NAN_CHINH_PATH.exists():
             pytest.skip(f"Không tìm thấy: {self.NAN_CHINH_PATH}")
 
+        img = cv2.imread(str(self.NAN_CHINH_PATH))
         key_20 = {k: v for k, v in answer_key.items() if k <= 20}
         correct, score, answers = grade_from_image(
-            str(self.NAN_CHINH_PATH), key_20
+            img, key_20
         )
         assert isinstance(correct, int)
         assert isinstance(score, float)

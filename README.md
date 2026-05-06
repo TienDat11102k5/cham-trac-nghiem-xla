@@ -152,11 +152,11 @@ Tạo file `data/answer_key.json`:
 
 ### Thành viên 5: Nguyễn An Kha - Chuyên viên Dữ liệu & Kiểm thử QA
 
-- [ ] Thu thập Đợt 2 (Tập Test bí mật có ảnh khó)
-- [ ] Xây dựng kịch bản kiểm thử (Test cases)
-- [ ] Chạy test tự động và báo Bug cho Dev
-- [ ] Tổng hợp số liệu đo kiểm thử, đánh giá Accuracy
-- [ ] Tạo nhãn Ground Truth cho tập dữ liệu
+- [X] Thu thập Đợt 2 (Tập Test bí mật có ảnh khó)
+- [X] Xây dựng kịch bản kiểm thử (Test cases)
+- [X] Chạy test tự động và báo Bug cho Dev
+- [X] Tổng hợp số liệu đo kiểm thử, đánh giá Accuracy
+- [X] Tạo nhãn Ground Truth cho tập dữ liệu
 
 ### Thành viên 6: Nguyễn Gia Quy - Tools Debug và Chuyên viên viết báo cáo
 

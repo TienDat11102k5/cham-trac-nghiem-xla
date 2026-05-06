@@ -88,7 +88,7 @@ class TestFindDocumentCorners:
         
         # Bước 2 & 3 - Gọi tim_goc_giay() và expect ValueError
         with pytest.raises(ValueError, match="Không tìm thấy tờ giấy thi"):
-            tim_goc_giay(anh_trong)
+            tim_goc_giay(anh_trong, auto_detect_cropped=False)
     
     def test_find_corners_multiple_contours(self):
         """Test với nhiều contours - phải chọn contour lớn nhất"""
@@ -256,7 +256,7 @@ class TestProcessRealImages:
             
             # Bước 4 - Tìm 4 góc (TV3)
             try:
-                cac_goc = tim_goc_giay(anh_canh)
+                cac_goc = tim_goc_giay(anh_canh, auto_detect_cropped=False)
                 assert cac_goc.shape == (4, 2)
                 
                 # Vẽ góc lên ảnh gốc
