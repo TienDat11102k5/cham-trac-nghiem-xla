@@ -158,14 +158,12 @@ Tạo file `data/answer_key.json`:
 - [ ] Tổng hợp số liệu đo kiểm thử, đánh giá Accuracy
 - [ ] Tạo nhãn Ground Truth cho tập dữ liệu
 
-### Thành viên 6: Nguyễn Gia Quý - Chuyên trách Báo cáo khoa học
+### Thành viên 6: Nguyễn Gia Quý - Tools Debug và Chuyên viên viết báo cáo
 
-- [X] Tổng hợp tài liệu/lý thuyết
-- [X] Lên khung mục lục
-- [X] Phỏng vấn Dev để viết sơ đồ thuật toán
-- [ ] Tổng hợp số liệu kiểm thử từ TV5 vào chương kết quả
-- [X] Hoàn thiện format, lưu giữ lý do chọn thuật toán
-- [X] Viết báo cáo khoa học hoàn chỉnh
+- [X] Phát triển module tools debug pipeline, batch processing, phân tích anchor
+- [X] Xây dựng Jupyter Notebook demo: `notebooks/pipeline_demo.ipynb`
+- [X] Viết tài liệu kỹ thuật: `docs/BaoCaoDoAn.md`
+- [X] Hoàn thiện báo cáo khoa học
 
 ## Công nghệ sử dụng
 
@@ -183,7 +181,7 @@ Tạo file `data/answer_key.json`:
 | 3 | **Lưu Nhất Huy** | Lập trình viên Cốt lõi 2 (Transform) | Module transform.py, perspective transform |
 | 4 | **Nguyễn Thị Thu Vân** | Lập trình viên Cốt lõi 3 (Grader) | Module grader.py, chấm điểm |
 | 5 | **Nguyễn An Khả** | Chuyên viên Dữ liệu & QA | Kiểm thử, tạo Ground Truth, đánh giá Accuracy |
-| 6 | **Nguyễn Gia Quý** | Chuyên trách Báo cáo | Viết báo cáo khoa học, tài liệu |
+| 6 | **Nguyễn Gia Quý** | Tools Debug & Báo cáo | Module tools/, Jupyter Notebook, tài liệu kỹ thuật, báo cáo khoa học |
 
 ## Tài liệu tham khảo
 

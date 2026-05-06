@@ -1,13 +1,13 @@
 {
-  "image_path": "E:/cham-trac-nghiem-xla/data/raw/test_sheet_01.jpg",
+  "image_path": "E:\\cham-trac-nghiem-xla\\data\\raw\\test_sheet_01.jpg",
   "so_bao_danh": "123456",
   "ma_de": "101",
   "num_questions": 20,
   "total": 20,
-  "correct": 5,
-  "wrong": 15,
-  "score": 2.5,
-  "score_display": "2.50/10",
+  "correct": 6,
+  "wrong": 14,
+  "score": 3.0,
+  "score_display": "3.00/10",
   "answers": {
     "1": "B",
     "2": "C",
@@ -18,7 +18,7 @@
     "7": "B",
     "8": "C",
     "9": "B",
-    "10": "D",
+    "10": "B",
     "11": "A",
     "12": "B",
     "13": "C",
@@ -77,9 +77,9 @@
       "result": "wrong"
     },
     "10": {
-      "student": "D",
+      "student": "B",
       "correct": "B",
-      "result": "wrong"
+      "result": "correct"
     },
     "11": {
       "student": "A",
