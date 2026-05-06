@@ -115,49 +115,57 @@ Tạo file `data/answer_key.json`:
 
 ## Nhiệm vụ phân công
 
-### Thành viên 1: Quản trị Hệ thống & Kiến trúc
+### Thành viên 1: Đỗ Tiến Đạt - Lập trình viên Cốt lõi (Module Reader)
 
 - [X] Thiết lập Repository, viết khung main.py
 - [X] Định nghĩa các tham số (Interface/API) đầu vào/ra cho các Core Dev
 - [X] Phân nhánh Github, đóng gói mã nguồn & viết README
+- [X] Lập trình module `reader.py` (Phát hiện anchor, đọc mã đề, SBD)
+- [X] Phát hiện anchor markers bằng contour detection
+- [X] Phân loại vùng ROI (SBD, Mã đề, Đáp án)
+- [X] Đọc mã đề và số báo danh bằng HoughCircles + Z-score
+- [X] Viết test cases cho module reader
 
-### Thành viên 2: Lập trình viên Cốt lõi 1 (Tiền xử lý)
+### Thành viên 2: Phạm Võ Thành Đạt - Lập trình viên Cốt lõi 1 (Tiền xử lý & Hỗ trợ Reader)
 
 - [X] Khởi tạo hàm đọc ảnh
-- [X] Lập trình viên Cốt lõi 1 (Gaussian, Median...) để làm sạch nhiễu
-- [X] Hỗ trợ TV3 tìm cạnh (Canny)
+- [X] Lập trình bộ lọc nhiễu (Gaussian, Median, Bilateral)
+- [X] Hỗ trợ TV1 phát hiện cạnh (Canny) cho module reader
+- [X] Hỗ trợ TV1 tối ưu thuật toán phát hiện anchor
 - [X] Viết test cases cho module preprocessing
 
-### Thành viên 3: Lập trình viên Cốt lõi 2 (Biến đổi hình học)
+### Thành viên 3: Lưu Nhất Huy - Lập trình viên Cốt lõi 2 (Biến đổi hình học)
 
-- [X] Nhận ảnh từ TV2, lập trình lấy thuật toán tìm 4 góc
+- [X] Nhận ảnh từ TV2, lập trình thuật toán tìm 4 góc
 - [X] Áp dụng Biến đổi phối cảnh (Perspective Transform) nắn phẳng tờ giấy bị nghiêng
 - [X] Đóng gói thành module độc lập (src/transform.py)
 - [X] Tối ưu chống cắt lẹm góc/nhầm khung (sử dụng morphology)
 - [X] Viết test cases đầy đủ
 
-### Thành viên 4: Lập trình viên Cốt lõi 3 (Phân đoạn & Chấm điểm)
+### Thành viên 4: Nguyễn Thị Thu Vân - Lập trình viên Cốt lõi 3 (Phân đoạn & Chấm điểm)
 
-- [ ] Không đợi TV3: Tự chuẩn bị ảnh mẫu (mock data)
-- [ ] Cắt tọa độ lưới đáp án
-- [ ] Phân ngưỡng mức đen & Đếm logic tính điểm
-- [ ] Viết test cases với mock data
+- [X] Không đợi TV3: Tự chuẩn bị ảnh mẫu (mock data)
+- [X] Cắt tọa độ lưới đáp án
+- [X] Phân ngưỡng mức đen & Đếm logic tính điểm
+- [X] Viết test cases với mock data
+- [X] Tích hợp module grader.py với pipeline
 
-### Thành viên 5: Chuyên viên Dữ liệu & Kiểm thử QA
+### Thành viên 5: Nguyễn An Khả - Chuyên viên Dữ liệu & Kiểm thử QA
 
 - [ ] Thu thập Đợt 2 (Tập Test bí mật có ảnh khó)
 - [ ] Xây dựng kịch bản kiểm thử (Test cases)
 - [ ] Chạy test tự động và báo Bug cho Dev
 - [ ] Tổng hợp số liệu đo kiểm thử, đánh giá Accuracy
+- [ ] Tạo nhãn Ground Truth cho tập dữ liệu
 
-### Thành viên 6: Chuyên trách Báo cáo khoa học
+### Thành viên 6: Nguyễn Gia Quý - Chuyên trách Báo cáo khoa học
 
-- [ ] Tổng hợp tài liệu/lý thuyết
-- [ ] Lên khung mục lục
-- [ ] Phụ giúp TV5 tạo nhãn Ground Truth và quyết định các thang đo (Accuracy...)
-- [ ] Phỏng vấn Dev để viết sơ đồ lưu thuật toán
-- [ ] Tổng hợp số liệu do kiểm thử, chỉnh xác từ TV5 vào chương kết quả
-- [ ] Hoàn thiện format, lưu giữ dây dư lý do chọn thuật toán
+- [X] Tổng hợp tài liệu/lý thuyết
+- [X] Lên khung mục lục
+- [X] Phỏng vấn Dev để viết sơ đồ thuật toán
+- [ ] Tổng hợp số liệu kiểm thử từ TV5 vào chương kết quả
+- [X] Hoàn thiện format, lưu giữ lý do chọn thuật toán
+- [X] Viết báo cáo khoa học hoàn chỉnh
 
 ## Công nghệ sử dụng
 
@@ -168,9 +176,14 @@ Tạo file `data/answer_key.json`:
 
 ## Thành viên nhóm
 
-- Thành viên 1: [Tên] - [Nhiệm vụ]
-- Thành viên 2: [Tên] - [Nhiệm vụ]
-- Thành viên 3: [Tên] - [Nhiệm vụ]
+| STT | Họ và Tên | Vai trò | Nhiệm vụ chính |
+|-----|-----------|---------|----------------|
+| 1 | **Đỗ Tiến Đạt** | Lập trình viên Cốt lõi (Reader) | Module reader.py, phát hiện anchor, đọc mã đề/SBD |
+| 2 | **Phạm Võ Thành Đạt** | Lập trình viên Cốt lõi 1 (Preprocessing) | Module preprocessing.py, hỗ trợ TV1 |
+| 3 | **Lưu Nhất Huy** | Lập trình viên Cốt lõi 2 (Transform) | Module transform.py, perspective transform |
+| 4 | **Nguyễn Thị Thu Vân** | Lập trình viên Cốt lõi 3 (Grader) | Module grader.py, chấm điểm |
+| 5 | **Nguyễn An Khả** | Chuyên viên Dữ liệu & QA | Kiểm thử, tạo Ground Truth, đánh giá Accuracy |
+| 6 | **Nguyễn Gia Quý** | Chuyên trách Báo cáo | Viết báo cáo khoa học, tài liệu |
 
 ## Tài liệu tham khảo
 
